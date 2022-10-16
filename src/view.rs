@@ -178,7 +178,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 .push(Text::new("Username:"))
                 .push(
                     Container::new(
-                        TextInput::new(&mut state.username_field_state, "", &mut state.username_field_value, username_text_handler)
+                        TextInput::new(&mut state.username_field_state, "", &mut state.username_field_value, username_text_handler).on_submit(Message::LoginPressed)
                     ).width(iced::Length::Units(140)).align_x(iced::alignment::Horizontal::Right)
                 )
            )
@@ -188,7 +188,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 .push(Text::new("Password:"))
                 .push(
                     Container::new(
-                        TextInput::new(&mut state.password_field_state, "", &mut state.password_field_value, password_text_handler).password()
+                        TextInput::new(&mut state.password_field_state, "", &mut state.password_field_value, password_text_handler).password().on_submit(Message::LoginPressed)
                     ).width(iced::Length::Units(140)).align_x(iced::alignment::Horizontal::Right)
                 )
             )

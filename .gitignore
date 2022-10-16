@@ -5,3 +5,4 @@ logs/
 *.recast_base
 *.pt
 *.jit
+.sessiontoken

@@ -1,7 +1,7 @@
 // launch as a gui app on windows without a command prompt
 #![windows_subsystem = "windows"]
 
-use std::{path::PathBuf, env};
+use std::{path::PathBuf, env, io::Write};
 use iced::{executor, Application, Element, Command, Settings, window::{self, Icon}, Subscription, keyboard::{self, KeyCode}};
 use iced_native::{event, subscription, Event};
 use cpal::{SampleRate, BufferSize, SampleFormat};
@@ -17,6 +17,7 @@ mod audio;
 mod softvc;
 mod vad;
 mod consts;
+mod api;
 
 use softvc::Model;
 use audio::DeviceType;
@@ -58,10 +59,6 @@ pub enum AppError {
     ResampleError(#[from] rubato::ResampleError)
 }
 
-#[derive(Error, Debug, Clone)]
-pub enum LoginError {
-
-}
 
 const ICON: &[u8; 262144] = include_bytes!("../assets/icon.data");
 
@@ -126,6 +123,8 @@ struct App {
     view_state: view::ViewState,
     input_device_list_options: Vec<String>,
     output_device_list_options: Vec<String>,
+    session_token: Option<String>,
+    userdata: Option<json::JsonValue>,
     record_sender: Option<std::sync::mpsc::Sender<(bool, f32)>>,
     realtime_record_sender: Option<std::sync::mpsc::Sender<(bool, f32, f32)>>,
     recording: bool,
@@ -153,8 +152,10 @@ pub enum Message {
     UsernameChanged(String),
     PasswordChanged(String),
     LoginPressed,
-    LoginSuccess,
-    LoginFailed(LoginError),
+    LoginSuccess(String),
+    LoginFailed(api::ApiError),
+    SessionValid(json::JsonValue),
+    SessionFailed(api::ApiError),
     None
 }
 
@@ -196,11 +197,27 @@ impl Application for App {
         input_device_list_options.insert(0, String::from("From file"));
         let mut output_device_list_options: Vec<String> = audio::get_output_device_list();
         output_device_list_options.insert(0, String::from("To file"));
+
+
+        let mut session_token = None;
+        let userdata = None;
+        if let Ok(string) = std::fs::read_to_string(".sessiontoken") {
+            session_token = Some(string);
+        }
+
         let record_vec = Vec::new();
 
         view_state.login_modal_state.show(true);
 
         tch::maybe_init_cuda();
+
+        let command;
+        if let Some(token) =  session_token.clone() {
+           command = Command::perform(api::check_session(token), api::session_callback);
+        }
+        else {
+            command = Command::none();
+        }
 
         (
             App {
@@ -211,13 +228,15 @@ impl Application for App {
                 view_state,
                 input_device_list_options,
                 output_device_list_options,
+                session_token,
+                userdata,
                 recording,
                 record_sender,
                 realtime_recording,
                 realtime_record_sender,
                 record_vec,
             },
-            Command::none()
+            command
         )
     }
 
@@ -532,13 +551,26 @@ impl Application for App {
                 let username = self.view_state.login_modal_state.inner().username_field_value.clone();
                 let password = self.view_state.login_modal_state.inner().password_field_value.clone();
 
-                command = Command::perform(login(username, password), login_callback);
+                command = Command::perform(api::login(username, password), api::login_callback);
             }
-            Message::LoginSuccess => { // TODO store session token etc.
+            Message::LoginSuccess(token) => {
+                match std::fs::File::create(".sessiontoken") {
+                    Ok(mut file) => { let _ = file.write_all(token.as_bytes()); },
+                    Err(e) => { error!("Failed to write the session token to file: {}", e); }
+                }
+                self.view_state.login_modal_state.inner_mut().login_failed = false;
                 self.view_state.login_modal_state.show(false);
             }
             Message::LoginFailed(e) => {
                 self.view_state.login_modal_state.inner_mut().login_err_msg = format!("{}", e);
+                self.view_state.login_modal_state.inner_mut().login_failed = true;
+            }
+            Message::SessionValid(user) => {
+                self.userdata = Some(user);
+                self.view_state.login_modal_state.show(false);
+            }
+            Message::SessionFailed(e) => {
+                error!("Error validating session: {}", e);
             }
             Message::None => { }
         }
@@ -993,14 +1025,3 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
     Ok(())
 }
 
-async fn login(username: String, password: String) -> Result<(), LoginError> {
-
-    Ok(())
-}
-
-fn login_callback(res: Result<(), LoginError>) -> Message {
-    match res {
-        Ok(_) => Message::LoginSuccess,
-        Err(e) => Message::LoginFailed(e) 
-    }
-}
