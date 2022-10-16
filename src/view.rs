@@ -1,8 +1,11 @@
 use crate::Message;
 use std::path::PathBuf;
-use iced::{Text, Row, Column, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}};
+use iced::{Text, Row, Column, Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}};
+use iced_aw::{modal::{self, Modal}, card::{self, Card}};
 
+#[derive(Default)]
 pub struct ViewState {
+    pub login_modal_state: modal::State<LoginModalState>,
     pub model_browse_state: button::State,
     pub record_state: button::State,
     pub play_target_state: button::State,
@@ -28,57 +31,21 @@ pub struct ViewState {
     pub show_debug: bool,
 }
 
+#[derive(Default)]
+pub struct LoginModalState {
+    login_button_state: button::State,
+    username_field_state: text_input::State,
+    username_field_value: String,
+    password_field_state: text_input::State,
+    password_field_value: String,
+}
+
 impl ViewState{
     pub fn new() -> Self {
-        let model_browse_state = button::State::new();
-        let record_state = button::State::new();
-        let play_target_state = button::State::new();
-        let play_source_state = button::State::new();
-        let realtime_record_state = button::State::new();
-        let hifigan_browse_state = button::State::new();
-        let hubert_browse_state = button::State::new();
-        let input_browse_state = button::State::new();
-        let output_browse_state = button::State::new();
-        let slider_1_state = slider::State::new();
-        let slider_2_state = slider::State::new();
-        let input_device_list_state = pick_list::State::new();
-        let output_device_list_state = pick_list::State::new();
-        let model_browse_selected =  None;
-        let hifigan_browse_selected = None;
-        let hubert_browse_selected = None;
-        let input_browse_selected = None;
-        let input_device_list_selected = None;
-        let output_device_list_selected = None;
-        let output_browse_selected = None;
-        let slider_1_value = 80.0;
-        let slider_2_value = 80.0;
-        let show_debug = false;
-
-        Self {
-            model_browse_state,
-            record_state,
-            play_target_state,
-            play_source_state,
-            realtime_record_state,
-            hifigan_browse_state,
-            hubert_browse_state,
-            input_browse_state,
-            output_browse_state,
-            slider_1_state,
-            slider_2_state,
-            input_device_list_state,
-            output_device_list_state,
-            model_browse_selected,
-            hifigan_browse_selected,
-            hubert_browse_selected,
-            input_browse_selected,
-            input_device_list_selected,
-            output_device_list_selected,
-            output_browse_selected,
-            slider_1_value,
-            slider_2_value,
-            show_debug,
-        }
+        let mut view_state = Self::default();
+        view_state.slider_1_value = 80.0;
+        view_state.slider_2_value = 80.0;
+        view_state
     }
 }
 pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a Vec<String>, output_device_list_options: &'a Vec<String>, recording: bool, realtime_recording: bool) -> Element<'a, Message> {
@@ -135,7 +102,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
     }
     let file_selection_row = Row::with_children(file_selection_row_elems).spacing(10);
 
-    let elements = Column::new().spacing(5)
+    let main_ui = Column::new().spacing(5)
         .push(model_selection_row)
         .push(
             Row::new().spacing(10)
@@ -197,5 +164,42 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
 
         );
 
-    elements.into()
+
+
+    // Login Modal
+    Modal::new(&mut view_state.login_modal_state, main_ui, |state| 
+       Card::new(
+           Text::new("Login"),
+           Column::new().spacing(10)
+           .push(
+                Row::new().spacing(5)
+                .push(Text::new("Username:"))
+                .push(
+                    Container::new(
+                        TextInput::new(&mut state.username_field_state, "", &mut state.username_field_value, input_handler)
+                    ).width(iced::Length::Units(140)).align_x(iced::alignment::Horizontal::Right)
+                )
+           )
+           .push(
+                Row::new().spacing(8) // bad hack to make the input fields line up despite
+                                      // differing widths of text 'username' and 'password'
+                .push(Text::new("Password:"))
+                .push(
+                    Container::new(
+                        TextInput::new(&mut state.password_field_state, "", &mut state.password_field_value, input_handler).password()
+                    ).width(iced::Length::Units(140)).align_x(iced::alignment::Horizontal::Right)
+                )
+            )
+        ).foot(
+            Container::new(
+            Button::new(&mut state.login_button_state, Text::new("Login")).on_press(Message::None)
+            ).width(iced::Length::Fill).center_x()
+        )
+       .max_width(250)
+       .into()
+    ).into()
+}
+
+fn input_handler(input: String) -> Message {
+    Message::None
 }

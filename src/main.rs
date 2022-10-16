@@ -177,7 +177,7 @@ impl Application for App {
         let acoustic = softvc::Acoustic::new();
         let hifigan = softvc::Hifigan::new();
         let vad = vad::Vad::new();
-        let view_state = view::ViewState::new();
+        let mut view_state = view::ViewState::new();
         let recording = false;
         let record_sender = None;
         let realtime_record_sender = None;
@@ -187,6 +187,8 @@ impl Application for App {
         let mut output_device_list_options: Vec<String> = audio::get_output_device_list();
         output_device_list_options.insert(0, String::from("To file"));
         let record_vec = Vec::new();
+
+        view_state.login_modal_state.show(true);
 
         tch::maybe_init_cuda();
 
@@ -692,7 +694,7 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
                             .map(|(e, sample)| {
                                 let mut sa = 0.0;
                                 for i in 0..(samples.len() / VAD_SIZE)  {
-                                    if e < (i+1)*VAD_SIZE && e >= i*VAD_SIZE &&  vad_confidence[i] > SPEAKER_THRESHOLD {
+                                    if e < (i+1)*VAD_SIZE && e > i*VAD_SIZE &&  vad_confidence[i] > SPEAKER_THRESHOLD {
                                         sa = *sample;
                                         break;
                                     }

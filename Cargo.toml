@@ -8,25 +8,18 @@ resolver = "2"
 
 [dependencies]
 iced = "0.4.2"
-ringbuf = "0.2.8"
+iced_native = "0.5.1"
+iced_aw = { version = "0.2.0", default-features=false, features=["card", "modal"]}
 native-dialog = "0.6.3"
+cpal = "0.14.0"
+ringbuf = "0.2.8"
 tch = "0.8.0"
 hound = "3.4.0"
-iced_native = "0.5.1"
 thiserror = "1.0"
 fern = "0.6.1"
 log = "0.4.17"
 chrono = "0.4.22"
 rubato = "0.12.0"
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-cpal = { version = "0.14.0", features=["wasm-bindgen"] }
-wasm-bindgen = "0.2.45"
-web-sys = { version = "0.3.22", features=["console"] }
-console_error_panic_hook = "0.1.5"
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-cpal = "0.14.0"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
