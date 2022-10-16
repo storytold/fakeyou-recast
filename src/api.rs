@@ -100,9 +100,6 @@ pub async fn check_session(token: String) -> Result<json::JsonValue, ApiError> {
         reqwest::StatusCode::TOO_MANY_REQUESTS => {
             Err(ApiError::ServerOverloaded)
         }
-        reqwest::StatusCode::UNAUTHORIZED => {
-            Err(ApiError::InvalidLoginCredentials)
-        },
         reqwest::StatusCode::INTERNAL_SERVER_ERROR => {
             Err(ApiError::ServerError)
         },
