@@ -58,6 +58,11 @@ pub enum AppError {
     ResampleError(#[from] rubato::ResampleError)
 }
 
+#[derive(Error, Debug, Clone)]
+pub enum LoginError {
+
+}
+
 const ICON: &[u8; 262144] = include_bytes!("../assets/icon.data");
 
 pub fn main() -> iced::Result {
@@ -145,6 +150,11 @@ pub enum Message {
     InputBrowsePressed,
     OutputBrowsePressed,
     RecordingFinished(Vec<f32>),
+    UsernameChanged(String),
+    PasswordChanged(String),
+    LoginPressed,
+    LoginSuccess,
+    LoginFailed(LoginError),
     None
 }
 
@@ -511,6 +521,24 @@ impl Application for App {
 
             Message::RecordingFinished(vec) => {
                 self.record_vec = vec;
+            }
+            Message::UsernameChanged(username) => {
+                self.view_state.login_modal_state.inner_mut().username_field_value = username;
+            }
+            Message::PasswordChanged(password) => {
+                self.view_state.login_modal_state.inner_mut().password_field_value = password;
+            }
+            Message::LoginPressed => {
+                let username = self.view_state.login_modal_state.inner().username_field_value.clone();
+                let password = self.view_state.login_modal_state.inner().password_field_value.clone();
+
+                command = Command::perform(login(username, password), login_callback);
+            }
+            Message::LoginSuccess => { // TODO store session token etc.
+                self.view_state.login_modal_state.show(false);
+            }
+            Message::LoginFailed(e) => {
+                self.view_state.login_modal_state.inner_mut().login_err_msg = format!("{}", e);
             }
             Message::None => { }
         }
@@ -963,4 +991,16 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
     }
     info!("Finished playing target audio");
     Ok(())
+}
+
+async fn login(username: String, password: String) -> Result<(), LoginError> {
+
+    Ok(())
+}
+
+fn login_callback(res: Result<(), LoginError>) -> Message {
+    match res {
+        Ok(_) => Message::LoginSuccess,
+        Err(e) => Message::LoginFailed(e) 
+    }
 }

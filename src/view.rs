@@ -33,11 +33,13 @@ pub struct ViewState {
 
 #[derive(Default)]
 pub struct LoginModalState {
-    login_button_state: button::State,
-    username_field_state: text_input::State,
-    username_field_value: String,
-    password_field_state: text_input::State,
-    password_field_value: String,
+    pub login_button_state: button::State,
+    pub username_field_state: text_input::State,
+    pub username_field_value: String,
+    pub password_field_state: text_input::State,
+    pub password_field_value: String,
+    pub login_failed: bool,
+    pub login_err_msg: String
 }
 
 impl ViewState{
@@ -176,7 +178,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 .push(Text::new("Username:"))
                 .push(
                     Container::new(
-                        TextInput::new(&mut state.username_field_state, "", &mut state.username_field_value, input_handler)
+                        TextInput::new(&mut state.username_field_state, "", &mut state.username_field_value, username_text_handler)
                     ).width(iced::Length::Units(140)).align_x(iced::alignment::Horizontal::Right)
                 )
            )
@@ -186,13 +188,14 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 .push(Text::new("Password:"))
                 .push(
                     Container::new(
-                        TextInput::new(&mut state.password_field_state, "", &mut state.password_field_value, input_handler).password()
+                        TextInput::new(&mut state.password_field_state, "", &mut state.password_field_value, password_text_handler).password()
                     ).width(iced::Length::Units(140)).align_x(iced::alignment::Horizontal::Right)
                 )
             )
+           .push(Text::new(if state.login_failed { &state.login_err_msg } else { "" }).color(iced::Color::from_rgb(1.0, 0.0, 0.0)).size(15))
         ).foot(
             Container::new(
-            Button::new(&mut state.login_button_state, Text::new("Login")).on_press(Message::None)
+            Button::new(&mut state.login_button_state, Text::new("Login")).on_press(Message::LoginPressed)
             ).width(iced::Length::Fill).center_x()
         )
        .max_width(250)
@@ -200,6 +203,10 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
     ).into()
 }
 
-fn input_handler(input: String) -> Message {
-    Message::None
+fn username_text_handler(input: String) -> Message {
+    Message::UsernameChanged(input)
+}
+
+fn password_text_handler(input: String) -> Message {
+    Message::PasswordChanged(input)
 }
