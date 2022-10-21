@@ -1,5 +1,5 @@
 use std::{fs::File, path::PathBuf};
-use cpal::{self, SampleRate, BufferSize, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use cpal::{self, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
 use crate::AppError;
 use log::{info, error};
 use rubato::{FftFixedInOut, Resampler};
@@ -113,12 +113,17 @@ pub fn play_audio_buf(output_device: DeviceType, buf: Vec<f32>, volume: f32) -> 
         },
         DeviceType::Device(d) =>
         {
-            let output_config = d.default_output_config().map_err(|_e| AppError::BuildOutputStreamError(cpal::BuildStreamError::StreamConfigNotSupported))?.config();
+            let output_config = d.default_output_config().map_err(|e| AppError::StreamConfigError(e))?;
+            let sample_format = output_config.sample_format();
+            let out_n_channels = output_config.channels();
+            let out_rate = output_config.sample_rate().0 as usize;
+
+            info!("Output configured as: {} channels at {} Hz with format {:?}", out_n_channels, out_rate, sample_format);
+
             let playback_secs = buf.len() as f32 / 16000.0;
 
             // Resample
-            let out_rate = output_config.sample_rate.0 as usize;
-            let chunk_size = (out_rate as f32 * 0.4 * output_config.channels as f32) as usize; // 400ms
+            let chunk_size = (out_rate as f32 * 0.4 * output_config.channels() as f32) as usize; // 400ms
             let mut resampler = FftFixedInOut::<f32>::new(MODEL_SAMPLE_RATE, out_rate, chunk_size, 1).map_err(|e| AppError::ResamplerConstructionError(e))?;
             let mut resampler_input_buffer = resampler.input_buffer_allocate();
             let mut resampler_output_buffer = resampler.input_buffer_allocate();
@@ -140,22 +145,57 @@ pub fn play_audio_buf(output_device: DeviceType, buf: Vec<f32>, volume: f32) -> 
             }
 
             let mut i = 0;
-            let output_data_fn = move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                for (j, sample) in data.iter_mut().enumerate() {
-                    let s = output_vec[i];
-                    *sample = apply_volume(s, volume);
-                    let n_channels = output_config.channels;
-                    // Expand one sample to n_channels samples
-                    // ie mono to stereo
-                    if j%(n_channels as usize) == 0 && i < output_vec.len() - 1
-                    {
-                        i += 1;
+            let output_data_fn = move |data: &mut cpal::Data, _: &cpal::OutputCallbackInfo| {
+                match data.sample_format() {
+                    SampleFormat::F32 => {
+                        // this unwrap is safe because it only happens if the sample format doesn't
+                        // match which we just checked 
+                        let data_slice: &mut [f32] = data.as_slice_mut().unwrap(); 
+                        for (j, sample) in data_slice.iter_mut().enumerate() {
+                            let s = output_vec[i];
+                            *sample = apply_volume(s, volume);
+                            // Expand one sample to n_channels samples
+                            // ie mono to stereo
+                            if j%(out_n_channels as usize) == 0 && i < output_vec.len() - 1
+                            {
+                                i += 1;
+                            }
+                        }
                     }
+                    SampleFormat::I16 => {
+                        // this unwrap is safe because it only happens if the sample format doesn't
+                        // match which we just checked 
+                        let data_slice: &mut [i16] = data.as_slice_mut().unwrap(); 
+                        for (j, sample) in data_slice.iter_mut().enumerate() {
+                            let s = output_vec[i];
+                            *sample = float_to_pcm_s16(apply_volume(s, volume));
+                            // Expand one sample to n_channels samples
+                            // ie mono to stereo
+                            if j%(out_n_channels as usize) == 0 && i < output_vec.len() - 1
+                            {
+                                i += 1;
+                            }
+                        }
+                    }
+                    SampleFormat::U16 => {}
                 }
 
             };
 
-            let output_stream = d.build_output_stream(&output_config, output_data_fn, err_fn).map_err(|e| AppError::BuildOutputStreamError(e))?;
+            let output_stream = match sample_format
+            {
+               SampleFormat::F32 => {
+                    Ok(d.build_output_stream_raw(&output_config.config(), SampleFormat::F32, output_data_fn, err_fn).map_err(|e| AppError::BuildOutputStreamError(e, String::from("Default")))?)
+               }
+               SampleFormat::I16 => {
+                    Ok(d.build_output_stream_raw(&output_config.config(), SampleFormat::I16, output_data_fn, err_fn).map_err(|e| AppError::BuildOutputStreamError(e, String::from("Default")))?)
+               }
+               SampleFormat::U16 => {
+                   Err(AppError::GenericFormatError)
+               }
+            }?;
+            
+
             output_stream.play().map_err(|e| AppError::PlayStreamError("output", e))?;
             std::thread::sleep(core::time::Duration::from_secs_f32(playback_secs));
         }
@@ -178,7 +218,22 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
     match input_device {
         DeviceType::File((f, _)) => {
             let mut reader = hound::WavReader::new(f).map_err(|e| AppError::HoundError(e))?;
-            let record_vec: Result<Vec<f32>, AppError> = reader.samples::<f32>().map(|s| s.map_err(|e| AppError::HoundError(e))).collect();
+            let record_vec: Result<Vec<f32>, AppError>;
+            match (reader.spec().sample_format, reader.spec().bits_per_sample) {
+                (hound::SampleFormat::Float, 32) => {
+                    record_vec = reader.samples::<f32>().map(|s| s.map_err(|e| AppError::HoundError(e))).collect();
+                },
+                (hound::SampleFormat::Int, 16) => {
+                    record_vec = reader.samples::<i16>()
+                        .map(|s| maybe_pcm_s16_to_float(s))
+                        .map(|s| s.map_err(|e| AppError::HoundError(e)))
+                        .collect();
+                }
+                _ => {
+                    record_vec = Err(AppError::GenericFormatError)
+                }
+            }
+
             let mut output_vec: Vec<f32> = Vec::new();
 
             // Resample
@@ -188,7 +243,7 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
             let mut resampler_input_buffer = resampler.input_buffer_allocate();
             let mut resampler_output_buffer = resampler.input_buffer_allocate();
 
-            let record_vec = record_vec?;
+            let record_vec: Vec<f32> = record_vec?;
             let mut record_vec_iter = record_vec.iter();
             let mut chunk: Vec<f32> = record_vec_iter.by_ref().take(resampler.input_frames_next()).cloned().collect();
             while chunk.len() > 0 {
@@ -218,7 +273,11 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
         },
         DeviceType::Device(d) =>
         {
-            let input_config = d.default_input_config().map_err(|_e| AppError::BuildInputStreamError(cpal::BuildStreamError::StreamConfigNotSupported))?.config();
+            let input_config = d.default_input_config().map_err(|e| AppError::StreamConfigError(e))?;
+            let sample_format = input_config.sample_format();
+            let in_n_channels = input_config.channels();
+            let in_rate = input_config.sample_rate().0 as usize;
+            info!("Input configured as: {} channels at {} Hz with format {:?}", in_n_channels, in_rate, sample_format);
             let record_vec: Vec<f32> = Vec::new();
 
             use std::sync::{Arc, Mutex, atomic::{AtomicU32, Ordering}};
@@ -234,21 +293,46 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
             let atomic_vol2 = arc_atomic_vol.clone();
 
 
-            let input_data_fn = move |data: &[f32], _: &cpal::InputCallbackInfo| {
+            let input_data_fn = move |data: &cpal::Data, _: &cpal::InputCallbackInfo| {
                 let maybe_lock = arc1.try_lock();
-                if maybe_lock.is_err() { error!("Failed to grab the lock in the input data fn") }
+                if maybe_lock.is_err() { /*error!("Failed to grab the lock in the input data fn")*/ } // this was spamming
                 else {
                     let lock = maybe_lock.unwrap();
                     let mut record_vec = lock;
                     let input_vol = f32::from_bits(atomic_vol1.load(Ordering::Relaxed));
-                    for &sample in data.iter() {
-                        record_vec.push(apply_volume(sample, input_vol));
+                    match data.sample_format() {
+                        SampleFormat::F32 => {
+                            let data_slice: &[f32] = data.as_slice().unwrap();
+                            for &sample in data_slice.iter() {
+                                record_vec.push(apply_volume(sample, input_vol));
+                            }
+                        }
+                        SampleFormat::I16 => {
+                            let data_slice: &[i16] = data.as_slice().unwrap();
+                            for &sample in data_slice.iter() {
+                                record_vec.push(apply_volume(pcm_s16_to_float(sample), input_vol));
+                            }
+                        }
+                        SampleFormat::U16 => {}
                     }
                 }
 
             };
 
-            let input_stream = d.build_input_stream(&input_config, input_data_fn, err_fn).map_err(|e| AppError::BuildInputStreamError(e))?;
+
+            let input_stream = match sample_format
+                {
+                SampleFormat::F32 => {
+                        Ok(d.build_input_stream_raw(&input_config.config(), SampleFormat::F32, input_data_fn, err_fn).map_err(|e| AppError::BuildInputStreamError(e, String::from("Default")))?)
+                }
+                SampleFormat::I16 => {
+                        Ok(d.build_input_stream_raw(&input_config.config(), SampleFormat::I16, input_data_fn, err_fn).map_err(|e| AppError::BuildInputStreamError(e, String::from("Default")))?)
+                }
+                SampleFormat::U16 => {
+                    Err(AppError::GenericFormatError)
+                }
+
+            }?;
 
             input_stream.play().map_err(|e| AppError::PlayStreamError("input", e))?;
 
@@ -266,8 +350,7 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
             let record_vec = lock;
 
             // Resample
-            let in_rate = input_config.sample_rate.0 as usize;
-            let chunk_size = (in_rate as f32 * 0.4 * input_config.channels as f32) as usize; // 400ms
+            let chunk_size = (in_rate as f32 * 0.4 * in_n_channels as f32) as usize; // 400ms
             let mut resampler = FftFixedInOut::<f32>::new(in_rate, MODEL_SAMPLE_RATE, chunk_size, 1).map_err(|e| AppError::ResamplerConstructionError(e))?;
             let mut resampler_input_buffer = resampler.input_buffer_allocate();
             let mut resampler_output_buffer = resampler.input_buffer_allocate();
@@ -284,7 +367,7 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
                 resampler_input_buffer.push(chunk);
                 resampler.process_into_buffer(&resampler_input_buffer, &mut resampler_output_buffer, None)?;
                 // mix stereo (or more channels) to mono
-                for channel in resampler_output_buffer[0].chunks(input_config.channels as usize) {
+                for channel in resampler_output_buffer[0].chunks(in_n_channels as usize) {
                     let mut mixed: f32 = 0.0;
                     for i in 0..channel.len() {
                         mixed += channel[i]; 
@@ -302,49 +385,24 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
     }
 }
 
-//TODO volume control?
-//TODO cancel token
-#[allow(unused)]
-pub fn record_audio_fixed_size(input_device: DeviceType, buf: &'static mut [f32]) -> Result<(), AppError> {
-    let input_config = cpal::StreamConfig { channels: 1, sample_rate: SampleRate(48000), buffer_size: BufferSize::Default};
-    let buf_secs = buf.len() as f32 / 16000.0;
-
-
-    match input_device {
-        DeviceType::File((f, _)) => {
-            let mut reader = hound::WavReader::new(f).map_err(|e| AppError::HoundError(e))?;
-            reader.samples::<f32>().enumerate().try_for_each(|(i, sample)| 
-            {
-                if i < buf.len() {
-                    buf[i] = sample.map_err(|e| AppError::HoundError(e))?;
-                }
-                Ok::<(), AppError>(())
-            })?;
-        },
-        DeviceType::Device(d) => {
-            let mut i = 0;
-            let input_data_fn = move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                for (j, &sample) in data.iter().enumerate() {
-                    // Drop 2/3 of the samples to make 16KHz
-                    if j % 3 == 0 {
-                        buf[i] = sample;
-                        i += 1;
-                }
-                if i >= buf.len() { break; }
-                }
-            };
-            let input_stream = d.build_input_stream(&input_config, input_data_fn, err_fn).map_err(|e| AppError::BuildInputStreamError(e))?;
-            input_stream.play().map_err(|e| AppError::PlayStreamError("input", e))?;
-            std::thread::sleep(core::time::Duration::from_secs_f32(buf_secs));
-        },
-        DeviceType::None => {
-            Err(AppError::NoDevice("input"))?;
-        }
-    }
-    Ok(())
+pub fn pcm_s16_to_float(s16: i16) -> f32 {
+    s16 as f32 / 32768.0 as f32
 }
 
+pub fn maybe_pcm_s16_to_float(s16: Result<i16, hound::Error>) -> Result<f32, hound::Error> {
+    match s16 {
+        Ok(sa) => {
+            Ok(pcm_s16_to_float(sa))
+        }
+        Err(e) => {
+            Err(e)
+        }
+    }
+}
 
+pub fn float_to_pcm_s16(float: f32) -> i16 {
+    (float * 32768.0) as i16
+}
 
 //FIXME unpub this when the realtime audio code is moved in here
 pub fn err_fn(err: cpal::StreamError) {

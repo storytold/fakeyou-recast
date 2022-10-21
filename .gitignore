@@ -1,8 +1,10 @@
 target/
 logs/
+samples/
 *.wav
 *.recast
 *.recast_base
 *.pt
 *.jit
+*.fakeyou
 .sessiontoken

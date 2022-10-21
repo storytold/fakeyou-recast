@@ -2,10 +2,10 @@
 #![windows_subsystem = "windows"]
 
 use cpal::traits::{DeviceTrait, StreamTrait};
-use cpal::{SampleRate, BufferSize, SampleFormat};
+use cpal::{BufferSize, SampleFormat};
 use iced::{executor, Application, Element, Command, Settings, window::{self, Icon}, Subscription, keyboard::{self, KeyCode}};
 use iced_native::{event, subscription, Event};
-use log::{info, debug, trace, warn, error};
+use log::{info, debug,  warn, error};
 use model_serialization::model_serializer::ModelSerializer;
 use native_dialog::{FileDialog, MessageDialog};
 use ringbuf::RingBuffer;
@@ -32,10 +32,12 @@ pub enum AppError {
     NoDevice(&'static str),
     #[error("No {0} file selected")]
     NoFile(&'static str),
-    #[error("The stream could not be constructed.\nInput Device must support mono audio at 48kHz sample rate")]
-    BuildInputStreamError(#[source] cpal::BuildStreamError),
-    #[error("The stream could not be constructed.\nOutput Device must support stereo audio at 48kHz sample rate")]
-    BuildOutputStreamError(#[source] cpal::BuildStreamError),
+    #[error("{0}")]
+    StreamConfigError(#[source] cpal::DefaultStreamConfigError),
+    #[error("The input stream could not be constructed.\nInput Device must support FLOAT or PCM S16LE with a buffer size of {1}")]
+    BuildInputStreamError(#[source] cpal::BuildStreamError, String),
+    #[error("The output stream could not be constructed.\nOutput Device must support FLOAT or PCM S16LE with a buffer size of {1}")]
+    BuildOutputStreamError(#[source] cpal::BuildStreamError, String),
     #[error("The {0} stream could not be played")]
     PlayStreamError(&'static str, #[source] cpal::PlayStreamError),
     #[error("Nothing was received from the channel")]
@@ -44,7 +46,9 @@ pub enum AppError {
     ChannelSendError/*(#[from] std::sync::mpsc::SendError)*/,
     #[error("IO Error\n{0}")]
     IoError(#[from] std::io::Error),
-    #[error("WAV read/write error\n{0}\nInput wav files must be 16KHz mono in 32-bit float format")]
+    #[error("Audio format must be PCM S16LE or FLOAT32")]
+    GenericFormatError,
+    #[error("WAV read/write error\n{0}\nWAV files must be PCM S16LE or FLOAT32")]
     HoundError(#[from] hound::Error),
     #[error("Attempted to lock a mutex that is already locked")]
     LockError/*(#[from] std::sync::TryLockError)*/,
@@ -712,15 +716,16 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
         DeviceType::None => { Err(AppError::NoDevice("output"))?; }
     }
 
-    let mut input_config = cpal_input_device.as_ref().ok_or(AppError::NoDevice("input"))?.default_input_config().map_err(|_e| AppError::NoDevice("input"))?.config();
-    let mut output_config = cpal_output_device.as_ref().ok_or(AppError::NoDevice("output"))?.default_output_config().map_err(|_e| AppError::NoDevice("output"))?.config();
+    let input_config = cpal_input_device.as_ref().ok_or(AppError::NoDevice("input"))?.default_input_config().map_err(|_e| AppError::NoDevice("input"))?;
+    let output_config = cpal_output_device.as_ref().ok_or(AppError::NoDevice("output"))?.default_output_config().map_err(|_e| AppError::NoDevice("output"))?;
 
-
-    let in_rate = input_config.sample_rate.0 as usize;
-    let in_n_channels = input_config.channels as usize;
+    let in_rate = input_config.sample_rate().0 as usize;
+    let in_n_channels = input_config.channels() as usize;
+    let in_format = input_config.sample_format();
     
-    let out_rate = output_config.sample_rate.0 as usize;
-    let out_n_channels = output_config.channels as usize;
+    let out_rate = output_config.sample_rate().0 as usize;
+    let out_n_channels = output_config.channels() as usize;
+    let out_format = output_config.sample_format();
 
     let in_chunk_size = (0.4 * in_rate as f32 * in_n_channels as f32) as usize; // 400ms
     let out_chunk_size = (0.4 * out_rate as f32 * out_n_channels as f32) as usize; // 400ms
@@ -753,20 +758,39 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
     let ring2: RingBuffer<f32> = RingBuffer::new(out_chunk_size*2);
     let (mut producer2, mut consumer2) = ring2.split();
 
-    input_config.buffer_size = BufferSize::Fixed(in_chunk_size as u32);
-    output_config.buffer_size = BufferSize::Fixed(out_chunk_size as u32);
-
     let input_data_fn = move |data: &cpal::Data, _: &cpal::InputCallbackInfo| {
-        let data_slice: &[f32] = data.as_slice().unwrap();
-        for sample in data_slice.iter() {
-            let _ = producer1.push(audio::apply_volume(*sample, unsafe { INPUT_VOLUME}));
+        match in_format {
+            SampleFormat::F32 => {
+                let data_slice: &[f32] = data.as_slice().unwrap();
+                for sample in data_slice.iter() {
+                    let _ = producer1.push(audio::apply_volume(*sample, unsafe { INPUT_VOLUME}));
+                }
+            }
+            SampleFormat::I16 => {
+                let data_slice: &[i16] = data.as_slice().unwrap();
+                for sample in data_slice.iter() {
+                    let _ = producer1.push(audio::apply_volume(audio::pcm_s16_to_float(*sample), unsafe { INPUT_VOLUME}));
+                }
+            }
+            SampleFormat::U16 => {}
         }
     };
 
     let output_data_fn = move |data: &mut cpal::Data, _: &cpal::OutputCallbackInfo| {
-        let data_slice: &mut [f32] = data.as_slice_mut().unwrap();
-        for sample in data_slice.iter_mut() {
-            *sample = audio::apply_volume(consumer2.pop().unwrap_or(0.0), unsafe { OUTPUT_VOLUME });
+        match out_format {
+            SampleFormat::F32 => {
+                let data_slice: &mut [f32] = data.as_slice_mut().unwrap();
+                for sample in data_slice.iter_mut() {
+                    *sample = audio::apply_volume(consumer2.pop().unwrap_or(0.0), unsafe { OUTPUT_VOLUME });
+                }
+            }
+            SampleFormat::I16 => {
+                let data_slice: &mut [i16] = data.as_slice_mut().unwrap();
+                for sample in data_slice.iter_mut() {
+                    *sample = audio::float_to_pcm_s16(audio::apply_volume(consumer2.pop().unwrap_or(0.0), unsafe { OUTPUT_VOLUME }));
+                }
+            }
+            SampleFormat::U16 => {}
         }
     };
 
@@ -858,15 +882,45 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
         }
     });
 
-    let input_stream = cpal_input_device.ok_or(AppError::NoDevice("input"))?.build_input_stream_raw(&input_config, SampleFormat::F32, input_data_fn, audio::err_fn).map_err(|e| AppError::BuildInputStreamError(e))?;
-    let output_stream = cpal_output_device.ok_or(AppError::NoDevice("output"))?.build_output_stream_raw(&output_config, SampleFormat::F32, output_data_fn, audio::err_fn).map_err(|e| AppError::BuildOutputStreamError(e))?;
+    let in_dev = cpal_input_device.ok_or(AppError::NoDevice("input"))?;
+    let out_dev = cpal_output_device.ok_or(AppError::NoDevice("output"))?;
+
+    let mut input_config = input_config.config();
+    input_config.buffer_size = BufferSize::Fixed(in_chunk_size as u32);
+    let mut output_config = output_config.config();
+    output_config.buffer_size = BufferSize::Fixed(out_chunk_size as u32);
+    
+    let input_stream = match in_format {
+        SampleFormat::F32 => {
+            in_dev.build_input_stream_raw(&input_config, SampleFormat::F32, input_data_fn, audio::err_fn).map_err(|e| AppError::BuildInputStreamError(e, format!("{}", in_chunk_size)))
+        }
+        SampleFormat::I16 => {
+            in_dev.build_input_stream_raw(&input_config, SampleFormat::I16, input_data_fn, audio::err_fn).map_err(|e| AppError::BuildInputStreamError(e, format!("{}", in_chunk_size)))
+        }
+        SampleFormat::U16 => {
+            Err(AppError::GenericFormatError)
+        }
+    }?;
+
+    let output_stream = match out_format {
+        SampleFormat::F32 => {
+            out_dev.build_output_stream_raw(&output_config, SampleFormat::F32, output_data_fn, audio::err_fn).map_err(|e| AppError::BuildOutputStreamError(e, format!("{}", out_chunk_size)))
+        }
+        SampleFormat::I16 => {
+            out_dev.build_output_stream_raw(&output_config, SampleFormat::I16, output_data_fn, audio::err_fn).map_err(|e| AppError::BuildOutputStreamError(e, format!("{}", out_chunk_size)))
+        }
+        SampleFormat::U16 => {
+            Err(AppError::GenericFormatError)
+        }
+    }?;
+
+
     input_stream.play().map_err(|e| AppError::PlayStreamError("input", e))?;
     output_stream.play().map_err(|e| AppError::PlayStreamError("output", e))?;
     loop {
         if cancel_token2.load(std::sync::atomic::Ordering::Relaxed) {
-            //FIXME set the button text back to realtime instead of leaving it as stop.
-            core::mem::drop(input_stream);
-            core::mem::drop(output_stream);
+            //FIXME set the button text back to realtime instead of leaving it as stop when an
+            //error is encountered.
             break;
         }
         let (realtime_recording, ivol, ovol) = realtime_receiver.recv().map_err(|e| AppError::ChannelRecvError(e))?;
@@ -952,16 +1006,18 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
         DeviceType::Device(ref d) => {
             let playback_secs = source.len() as f32 / 16000.0;
 
-            let output_config = d.default_output_config().map_err(|_e| AppError::BuildOutputStreamError(cpal::BuildStreamError::StreamConfigNotSupported))?.config();
-            let out_rate = output_config.sample_rate.0 as usize;
-            let n_channels = output_config.channels as usize;
+            let output_config = d.default_output_config().map_err(|e| AppError::StreamConfigError(e))?;
+            let out_rate = output_config.sample_rate().0 as usize;
+            let n_channels = output_config.channels() as usize;
+            let sample_format = output_config.sample_format();
+            info!("Output configured as: {} channels at {} Hz with format {:?}", n_channels, out_rate, sample_format);
+
             let mut resampler = FftFixedInOut::<f32>::new(MODEL_SAMPLE_RATE, out_rate, OFFLINE_CHUNK_SIZE, 1).map_err(|e| AppError::ResamplerConstructionError(e))?;
             let mut resampler_input_buffer = resampler.input_buffer_allocate();
             let mut resampler_output_buffer = resampler.output_buffer_allocate();
             let resampler_input_size = resampler.input_frames_next();
             let resampler_output_size = resampler.output_frames_next();
-            debug!("out_n_channels: {}", n_channels);
-            debug!("out_rate: {}", out_rate);
+
             debug!("resampler_input_size: {}", resampler_input_size);
             debug!("resampler_output_size: {}", resampler_output_size);
 
@@ -1074,13 +1130,45 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
                 }
             });
 
-            let output_data_fn = move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                for sample in data.iter_mut() {
-                    *sample = audio::apply_volume(consumer.pop().unwrap_or(0.0), unsafe { OUTPUT_VOLUME });
+
+            let output_data_fn = move |data: &mut cpal::Data, _: &cpal::OutputCallbackInfo| {
+                match data.sample_format() {
+                    SampleFormat::F32 => {
+                        // this unwrap is safe because it only happens if the sample format doesn't
+                        // match which we just checked 
+                        let data_slice: &mut [f32] = data.as_slice_mut().unwrap(); 
+                        for sample in data_slice.iter_mut() {
+                            *sample = audio::apply_volume(consumer.pop().unwrap_or(0.0), unsafe { OUTPUT_VOLUME });
+                        }
+                    }
+                    SampleFormat::I16 => {
+                        // this unwrap is safe because it only happens if the sample format doesn't
+                        // match which we just checked 
+                        let data_slice: &mut [i16] = data.as_slice_mut().unwrap(); 
+                        for sample in data_slice.iter_mut() {
+                            *sample = audio::float_to_pcm_s16(audio::apply_volume(consumer.pop().unwrap_or(0.0), unsafe { OUTPUT_VOLUME }));
+                        }                    }
+                    SampleFormat::U16 => {}
                 }
+
             };
 
-            let output_stream = d.build_output_stream(&output_config, output_data_fn, audio::err_fn).map_err(|e| AppError::BuildOutputStreamError(e))?;
+
+            let output_stream = match sample_format
+            {
+               SampleFormat::F32 => {
+                    Ok(d.build_output_stream_raw(&output_config.config(), SampleFormat::F32, output_data_fn, audio::err_fn).map_err(|e| AppError::BuildOutputStreamError(e, String::from("Default")))?)
+               }
+               SampleFormat::I16 => {
+                    Ok(d.build_output_stream_raw(&output_config.config(), SampleFormat::I16, output_data_fn, audio::err_fn).map_err(|e| AppError::BuildOutputStreamError(e, String::from("Default")))?)
+               }
+               SampleFormat::U16 => {
+                   Err(AppError::GenericFormatError)
+               }
+
+            }?;
+
+
             output_stream.play().map_err(|e| {error!("Output stream error: {}", e); AppError::PlayStreamError("output", e)})?;
             //add a couple seconds in case we fall behind
             let stop_time = std::time::Instant::now() + core::time::Duration::from_secs_f32(playback_secs + 2.0);
