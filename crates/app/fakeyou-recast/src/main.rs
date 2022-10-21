@@ -5,7 +5,7 @@ use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{SampleRate, BufferSize, SampleFormat};
 use iced::{executor, Application, Element, Command, Settings, window::{self, Icon}, Subscription, keyboard::{self, KeyCode}};
 use iced_native::{event, subscription, Event};
-use log::{info, trace, warn, error};
+use log::{info, debug, trace, warn, error};
 use model_serialization::model_serializer::ModelSerializer;
 use native_dialog::{FileDialog, MessageDialog};
 use ringbuf::RingBuffer;
@@ -97,7 +97,7 @@ fn init_logging() -> Result<(), fern::InitError> {
                 message
             ))
         })
-        .level_for("fakeyou_recast", log::LevelFilter::Trace)
+        .level_for("fakeyou_recast", log::LevelFilter::Info)
         
         .level_for("fakeyou_recast::audio", log::LevelFilter::Info)
         //.level_for("fakeyou_recast::softvc", log::LevelFilter::Info)
@@ -731,10 +731,10 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
     let mut resampler1_output_buffer = resampler1.output_buffer_allocate();
     let resampler1_input_size = resampler1.input_frames_next();
     let resampler1_output_size = resampler1.output_frames_next();
-    trace!("in_n_channels: {}", in_n_channels);
-    trace!("in_rate: {}", in_rate);
-    trace!("resampler1_input_size: {}", resampler1_input_size);
-    trace!("resampler1_output_size: {}", resampler1_output_size);
+    debug!("in_n_channels: {}", in_n_channels);
+    debug!("in_rate: {}", in_rate);
+    debug!("resampler1_input_size: {}", resampler1_input_size);
+    debug!("resampler1_output_size: {}", resampler1_output_size);
     resampler1_input_buffer[0].resize(resampler1_input_size, 0.0);
 
     let mut resampler2 = FftFixedInOut::<f32>::new(MODEL_SAMPLE_RATE, out_rate, in_chunk_size / in_n_channels, 1).map_err(|e| AppError::ResamplerConstructionError(e))?;
@@ -742,10 +742,10 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
     let mut resampler2_output_buffer = resampler2.output_buffer_allocate();
     let resampler2_input_size = resampler2.input_frames_next();
     let resampler2_output_size = resampler2.output_frames_next();
-    trace!("out_n_channels: {}", out_n_channels);
-    trace!("out_rate: {}", out_rate);
-    trace!("resampler2_input_size: {}", resampler2_input_size);
-    trace!("resampler2_output_size: {}", resampler2_output_size);
+    debug!("out_n_channels: {}", out_n_channels);
+    debug!("out_rate: {}", out_rate);
+    debug!("resampler2_input_size: {}", resampler2_input_size);
+    debug!("resampler2_output_size: {}", resampler2_output_size);
     resampler2_input_buffer[0].resize(resampler2_input_size, 0.0);
 
     let ring1: RingBuffer<f32> = RingBuffer::new(in_chunk_size*2);
@@ -893,6 +893,7 @@ async fn start_recording(input_device: audio::DeviceType, receiver: std::sync::m
 /// Play back the input buffer
 async fn play_source(source: Vec<f32>, output_device: audio::DeviceType) -> Result<(), AppError> {
     info!("Playing source audio on {}", output_device);
+    debug!("source first 20 samples {:?}", source[0..20].to_vec());
     audio::play_audio_buf(output_device, source, unsafe { OUTPUT_VOLUME })
 }
 
@@ -900,6 +901,7 @@ async fn play_source(source: Vec<f32>, output_device: audio::DeviceType) -> Resu
 async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, vad: vad::Vad, output_device: audio::DeviceType) -> Result<(), AppError> {
     //TODO some kind of loading spinner or something while this is happening
     info!("Running inference and playing target audio on {}", output_device);
+    debug!("first 20 recorded samples: {:?}", source[..20].to_vec());
 
     match output_device {
         DeviceType::File((ref f, _)) => {
@@ -958,10 +960,10 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
             let mut resampler_output_buffer = resampler.output_buffer_allocate();
             let resampler_input_size = resampler.input_frames_next();
             let resampler_output_size = resampler.output_frames_next();
-            trace!("n_channels: {}", n_channels);
-            trace!("out_rate: {}", out_rate);
-            trace!("resampler_input_size: {}", resampler_input_size);
-            trace!("resampler_output_size: {}", resampler_output_size);
+            debug!("out_n_channels: {}", n_channels);
+            debug!("out_rate: {}", out_rate);
+            debug!("resampler_input_size: {}", resampler_input_size);
+            debug!("resampler_output_size: {}", resampler_output_size);
 
             resampler_input_buffer[0].resize(resampler_input_size, 0.0);
 
@@ -1003,6 +1005,8 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
                     vad_confidence.push(vad_tensor.double_value(&[0]) as f32)
                 });
 
+                debug!("vad_confidence: {:?}", vad_confidence);
+
                 let softvc_out = softvc::inference(&chunk, hubert.clone(), acoustic.clone(), hifigan.clone());
                 match softvc_out {
                     Ok(mut samples) => {
@@ -1010,6 +1014,7 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
                         if samples.len() < resampler_input_size {
                             samples.resize(resampler_input_size, 0.0);
                         }
+                        debug!("first 20 samples from inference: {:?}", samples[..20].to_vec()); 
                         samples.iter()
                         .enumerate()
                         .map(|(e, sample)| {
@@ -1051,7 +1056,10 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
                     if consumer2.len() >= resampler_input_size {
                         // resample
                         consumer2.pop_slice(&mut resampler_input_buffer[0][..resampler_input_size]);
-                        resampler.process_into_buffer(&resampler_input_buffer, &mut resampler_output_buffer, None);
+                        let resampler_res = resampler.process_into_buffer(&resampler_input_buffer, &mut resampler_output_buffer, None);
+                        if let Err(e) = resampler_res {
+                            error!("Resampler error: {}", e)
+                        }
                         resampler_output_buffer[0].iter().for_each(|&sample| {
                             // mono to stereo etc.
                             for _ in 0..n_channels {
@@ -1067,25 +1075,13 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
             });
 
             let output_data_fn = move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                if consumer.len() >= data.len() {
-                    for sample in data.iter_mut() {
-                        match consumer.pop() {
-                            Some(s) => {
-                                *sample = audio::apply_volume(s, unsafe { OUTPUT_VOLUME });
-                            },
-                            None => { *sample = 0.0; }
-                        }
-                    }
-                }
-                else if consumer.len() > 0 && consumer.len() < data.len() {
-                    //FIXME volume
-                    consumer.pop_slice(&mut data[..consumer.len()]);
-                    data[consumer.len()..].fill(0.0);
+                for sample in data.iter_mut() {
+                    *sample = audio::apply_volume(consumer.pop().unwrap_or(0.0), unsafe { OUTPUT_VOLUME });
                 }
             };
 
             let output_stream = d.build_output_stream(&output_config, output_data_fn, audio::err_fn).map_err(|e| AppError::BuildOutputStreamError(e))?;
-            output_stream.play().map_err(|e| AppError::PlayStreamError("output", e))?;
+            output_stream.play().map_err(|e| {error!("Output stream error: {}", e); AppError::PlayStreamError("output", e)})?;
             //add a couple seconds in case we fall behind
             let stop_time = std::time::Instant::now() + core::time::Duration::from_secs_f32(playback_secs + 2.0);
             loop {
