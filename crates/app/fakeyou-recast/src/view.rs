@@ -1,7 +1,8 @@
 use crate::Message;
 use std::path::PathBuf;
-use iced::{Text, Row, Column, Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}};
+use iced::{Length, Text, Row, Column,  Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}, Space, Color};
 use iced_aw::{modal::{self, Modal}, card::{self, Card}};
+use iced_native::alignment::{Horizontal, Vertical};
 
 #[derive(Default)]
 pub struct ViewState {
@@ -56,136 +57,211 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
     let empty_pathbuf = PathBuf::from("");
 
     // NB: New model selection
-    let mut fakeyou_model_selection_row_elems: Vec<Element<Message>> = vec![];
-    let selected_fakeyou_model_str = if view_state.fakeyou_model_browse_selected.is_none() { "" } else {view_state.fakeyou_model_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
+    let mut fakeyou_model_selection_col_elems: Vec<Element<Message>> = vec![];
+    let selected_fakeyou_model_str = if view_state.fakeyou_model_browse_selected.is_none() { "no file selected" } else {view_state.fakeyou_model_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
 
-    fakeyou_model_selection_row_elems
-        .push(Text::new("Select FakeYou Model File: ").into());
-    fakeyou_model_selection_row_elems
-        .push(Button::new(&mut view_state.fakeyou_model_browse_state, Text::new("Browse")).on_press(Message::FakeYouModelBrowsePressed).into());
-    fakeyou_model_selection_row_elems
-        .push(Text::new(selected_fakeyou_model_str).into());
+    fakeyou_model_selection_col_elems
+        .push(Row::new().spacing(5).push(Text::new("Select FakeYou Model File:"))
+            .push(
+            Text::new(selected_fakeyou_model_str)
+                .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                .size(14)
+                .color(Color::from_rgb8(191, 134, 138))
+        ).into());
+    fakeyou_model_selection_col_elems
+        .push(
+            Row::new().spacing(5)
+                .push(
+                    Button::new(&mut view_state.fakeyou_model_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::FakeYouModelBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35))
+                )
+            .into()
+        );
 
-    let fakeyou_model_selection_row = Row::with_children(fakeyou_model_selection_row_elems).spacing(10);
+    let fakeyou_model_selection_row = Column::with_children(fakeyou_model_selection_col_elems).spacing(7);
 
     // NB: Old model selection
-    let mut model_selection_row_elems: Vec<Element<Message>> = vec![];
-    let selected_model_str = if view_state.model_browse_selected.is_none() { "" } else {view_state.model_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
-    let selected_hifigan_str = if view_state.hifigan_browse_selected.is_none() { "" } else {view_state.hifigan_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
-    let selected_hubert_str = if view_state.hubert_browse_selected.is_none() { "" } else {view_state.hubert_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
-    model_selection_row_elems
-        .push(Text::new("Select Recast Model File: ").into());
-    model_selection_row_elems
-        .push(Button::new(&mut view_state.model_browse_state, Text::new("Browse")).on_press(Message::ModelBrowsePressed).into());
-    model_selection_row_elems
-        .push(Text::new(selected_model_str).into());
-        // TODO don't forget to remove this vocoder button when the models are merged to one file 
-        model_selection_row_elems
-            .push(Text::new("Select Vocoder: ").into());
-        model_selection_row_elems
-            .push(Button::new(&mut view_state.hifigan_browse_state, Text::new("Browse")).on_press(Message::HifiganBrowsePressed).into());
-        model_selection_row_elems
-        .push(Text::new(selected_hifigan_str).into());
-    if view_state.show_debug {
-        model_selection_row_elems
-            .push(Text::new("Select Debug Model: ").into());
-        model_selection_row_elems
-            .push(Button::new(&mut view_state.hubert_browse_state, Text::new("Browse")).on_press(Message::HubertBrowsePressed).into());
-        model_selection_row_elems
-        .push(Text::new(selected_hubert_str).into());
-    }
-    let model_selection_row = Row::with_children(model_selection_row_elems).spacing(10);
+    let mut left_model_selection_col_elems: Vec<Element<Message>> = vec![];
+    let mut right_model_selection_col_elems: Vec<Element<Message>> = vec![];
+    let selected_model_str = if view_state.model_browse_selected.is_none() { "no file selected" } else {view_state.model_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
+    let selected_hifigan_str = if view_state.hifigan_browse_selected.is_none() { "no file selected" } else {view_state.hifigan_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
+    left_model_selection_col_elems
+        .push(
+            Row::new().spacing(5)
+                .push(
+                    Text::new("Select Recast Model File:")
+                )
+                .push(
+                    Text::new(selected_model_str)
+                        .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                        .size(14)
+                        .color(Color::from_rgb8(191, 134, 138))
+                ).into()
+        );
+    left_model_selection_col_elems.push(
+        Button::new(&mut view_state.model_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::ModelBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
+    );
+    right_model_selection_col_elems.push(
+            Row::new().spacing(5)
+                .push(Text::new("Select Vocoder:"))
+                .push(Text::new(selected_hifigan_str)
+                    .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                    .size(14)
+                    .color(Color::from_rgb8(191, 134, 138))
+                ).into()
+    );
+    right_model_selection_col_elems.push(
+        Button::new(&mut view_state.hifigan_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::HifiganBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
+    );
 
-    let mut file_selection_row_elems: Vec<Element<Message>> = vec![];
+
+    let mut left_file_selection_col_elems: Vec<Element<Message>> = vec![];
+    let mut right_file_selection_col_elems: Vec<Element<Message>> = vec![];
     if view_state.input_device_list_selected == Some(String::from("From file"))
     {
-        let selected_input_file_str = if view_state.input_browse_selected.is_none() { "" } else {view_state.input_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default() };
-        file_selection_row_elems.push(
-            Text::new("Input File: ").into()
+        let selected_input_file_str = if view_state.input_browse_selected.is_none() { "no file selected" } else {view_state.input_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default() };
+        left_file_selection_col_elems.push(
+            Row::new().spacing(5)
+                .push(
+                    Text::new("Input File:")
+                )
+                .push(
+                    Text::new(selected_input_file_str)
+                        .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                        .size(14)
+                        .color(Color::from_rgb8(191, 134, 138))
+                )
+            .into()
         );
-        file_selection_row_elems.push(
-            Button::new(&mut view_state.input_browse_state, Text::new("Browse")).on_press(Message::InputBrowsePressed).into()
+        left_file_selection_col_elems.push(
+            Button::new(&mut view_state.input_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::InputBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
         );
-        file_selection_row_elems.push(Text::new(selected_input_file_str).into());
     }
     if view_state.output_device_list_selected == Some(String::from("To file"))
     {
-        let selected_output_file_str = if view_state.output_browse_selected.is_none() { "" } else {view_state.output_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default() };
-        file_selection_row_elems.push(
-            Text::new("Output File: ").into()
+        let selected_output_file_str = if view_state.output_browse_selected.is_none() { "no file selected" } else {view_state.output_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default() };
+        right_file_selection_col_elems.push(
+            Row::new().spacing(5)
+                .push(
+                    Text::new("Output File:")
+                )
+                .push(
+                    Text::new(selected_output_file_str)
+                        .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                        .size(14)
+                        .color(Color::from_rgb8(191, 134, 138))
+                )
+            .into()
         );
-        file_selection_row_elems.push(
-            Button::new(&mut view_state.output_browse_state, Text::new("Browse")).on_press(Message::OutputBrowsePressed).into()
+        right_file_selection_col_elems.push(
+            Button::new(&mut view_state.output_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::OutputBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
         );
-        file_selection_row_elems.push(Text::new(selected_output_file_str).into());
     }
-    let file_selection_row = Row::with_children(file_selection_row_elems).spacing(10);
 
-    let main_ui = Column::new().spacing(5)
+    let main_container = Container::new(
+        Column::new().spacing(7)
         .push(fakeyou_model_selection_row)
-        .push(Row::new().spacing(10))
-        .push(model_selection_row)
         .push(
-            Row::new().spacing(10)
-            .push(Text::new("Input Device: "))
-            .push(
-                PickList::new(
-                    &mut view_state.input_device_list_state,
-                    input_device_list_options,
-                    view_state.input_device_list_selected.clone(),
-                    Message::InputDeviceChanged,
-                )
-            )
-            .push(Text::new("Output Device: "))
-            .push(
-                PickList::new(
-                    &mut view_state.output_device_list_state,
-                    output_device_list_options,
-                    view_state.output_device_list_selected.clone(),
-                    Message::OutputDeviceChanged,
-                )
+            Row::new().spacing(33).push( 
+                Column::new().spacing(7)
+                    .push(Column::with_children(left_model_selection_col_elems).spacing(7))
+                    .push(Text::new("Input Device:"))
+                    .push(
+                        PickList::new(
+                            &mut view_state.input_device_list_state,
+                            input_device_list_options,
+                            view_state.input_device_list_selected.clone(),
+                            Message::InputDeviceChanged,
+                        )
+                        .style(style::PickList)
+                        .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                        .width(Length::Units(260))
+                    )
+                    .push(
+                        Column::with_children(left_file_selection_col_elems).spacing(7)
+                    )
+                    .push(Text::new("Input Volume:"))
+                    .push(
+                        Container::new(
+                            Slider::new(&mut view_state.slider_1_state, 0.0..=100.0, view_state.slider_1_value, Message::Slider1Changed).style(style::Slider).height(44)
+                        ).width(Length::Units(260))
+                    ) 
+            ).push(
+                Column::new().spacing(7)
+                    .push(Column::with_children(right_model_selection_col_elems).spacing(7))
+                    .push(Text::new("Output Device:"))
+                    .push(
+                        PickList::new(
+                            &mut view_state.output_device_list_state,
+                            output_device_list_options,
+                            view_state.output_device_list_selected.clone(),
+                            Message::OutputDeviceChanged,
+                        )
+                        .style(style::PickList)
+                        .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                        .width(Length::Units(260))
+                    )
+                    .push(
+                        Column::with_children(right_file_selection_col_elems).spacing(7)
+                    )
+                    .push(Text::new("Output Volume:"))
+                    .push(
+                        Container::new(
+                            Slider::new(&mut view_state.slider_2_state, 0.0..=100.0, view_state.slider_2_value, Message::Slider2Changed).style(style::Slider).height(44)
+                        ).width(Length::Units(260))
+                    )
             )
         )
-        .push(
-            file_selection_row
-        )
-        .push(
-            Row::new().spacing(10)
-            .push(Text::new("Input Volume: "))
-            .push(
-                Slider::new(&mut view_state.slider_1_state, 0.0..=100.0, view_state.slider_1_value, Message::Slider1Changed)
-            )
-            .push(Text::new("Output Volume: "))
-            .push(
-                Slider::new(&mut view_state.slider_2_state, 0.0..=100.0, view_state.slider_2_value, Message::Slider2Changed)
-            )
+        .push(Space::with_height(Length::Units(42)))
+    ).style(style::MainContainer).width(Length::Fill).height(Length::Fill).padding(28);
+
+
+    let main_button_container = Container::new(
+        Column::new().push(
+            Space::with_height(Length::Units(10))
         )
         .push(
             Row::new().spacing(10)
             .push(
                 Button::new(&mut view_state.record_state, 
-                    if view_state.input_device_list_selected == Some(String::from("From file")) { Text::new("Read File")  }
+                    if view_state.input_device_list_selected == Some(String::from("From file")) { Text::new("Read File").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center) }
                     else if recording { Text::new("Stop")}
-                    else {Text::new("Record")}).on_press(Message::RecordPressed)
+                    else {Text::new("Record").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)}).on_press(Message::RecordPressed)
+                    .style(style::Button::Red)
+                    .width(Length::Units(130))
+                    .height(Length::Units(35))
             )
             .push(
-                Button::new(&mut view_state.play_source_state, Text::new("Play Source")).on_press(Message::PlaySourcePressed)
+                Button::new(&mut view_state.play_source_state, Text::new("Play Source").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::PlaySourcePressed)
+                .style(style::Button::Red)
+                .width(Length::Units(130))
+                .height(Length::Units(35))
             )
             .push(
                 Button::new(&mut view_state.play_target_state, 
-                    if view_state.output_device_list_selected == Some(String::from("To file")) { Text::new("Write File") }
+                    if view_state.output_device_list_selected == Some(String::from("To file")) { Text::new("Write File").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)}
                     else {
-                        Text::new("Play Target")
+                        Text::new("Play Target").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)
                     })
                     .on_press(Message::PlayTargetPressed)
+                    .style(style::Button::Red)
+                    .width(Length::Units(130))
+                    .height(Length::Units(35))
             )
             .push(
-                Button::new(&mut view_state.realtime_record_state, if realtime_recording { Text::new("Stop") } else {Text::new("Realtime\n(experimental)")}).on_press(Message::RealtimeRecordPressed)
+                Button::new(&mut view_state.realtime_record_state, if realtime_recording { Text::new("Stop") } else {Text::new("Realtime").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)}).on_press(Message::RealtimeRecordPressed)
+                .style(style::Button::Red)
+                .width(Length::Units(130))
+                .height(Length::Units(35))
             )
+        )
+        .push(Space::with_height(Length::Units(20)))
+        .push(Container::new(
+                Text::new("FakeYou Recast v1.0").size(12).color(Color::from_rgba8(255, 255, 255, 0.30))
+                .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+        ).width(Length::Fill).center_x())
+    ).style(style::MainButtonContainer).width(Length::Fill).height(Length::Units(130)).align_y(Vertical::Bottom).padding(28);
 
-        );
-
-
+    let main_ui = Column::new().push(main_container).push(main_button_container);
 
     // Login Modal
     Modal::new(&mut view_state.login_modal_state, main_ui, |state| 
@@ -220,6 +296,128 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
        .max_width(250)
        .into()
     ).into()
+}
+
+pub mod style {
+    use iced::{Color, Background, widget::{container, button, pick_list, slider}};
+    use iced_native::overlay::menu;
+    
+    pub struct MainContainer;
+    pub struct MainButtonContainer;
+
+    impl container::StyleSheet for MainContainer {
+        fn style(&self) -> container::Style {
+            container::Style {
+                text_color: Some(Color::WHITE),
+                background: Some(Background::Color(Color::from_rgb8(26, 26, 39))),
+                ..container::Style::default()
+
+            }
+        }
+    }
+
+    impl container::StyleSheet for MainButtonContainer {
+        fn style(&self) -> container::Style {
+            container::Style {
+                text_color: Some(Color::WHITE),
+                background: Some(Background::Color(Color::from_rgb8(36, 36, 51))),
+                ..container::Style::default()
+
+            }
+        }
+    }
+
+    pub enum Button {
+        Red,
+        Grey,
+    }
+
+    impl button::StyleSheet for Button {
+        fn active(&self) -> button::Style {
+            match self {
+                Button::Red => {
+                    button::Style {
+                        text_color: Color::WHITE,
+                        background: Some(Background::Color(Color::from_rgb8(252, 107, 104))),
+                        border_radius: 5.0,
+                        ..button::Style::default()
+                    }
+                },
+                Button::Grey => {
+                    button::Style {
+                    text_color: Color::WHITE,
+                        background: Some(Background::Color(Color::from_rgb8(57, 57, 76))),
+                        border_radius: 5.0,
+                        ..button::Style::default()
+                    }
+                }
+            }
+        }
+    }
+
+    pub struct PickList;
+    impl PickList {
+        fn style() -> pick_list::Style {
+           pick_list::Style {
+                text_color: Color::WHITE,
+                background: Background::Color(Color::from_rgb8(57, 57, 76)),
+                border_width: 0.0,
+                border_radius: 5.0,
+                ..Default::default()
+           }
+        }
+    }
+    impl pick_list::StyleSheet for PickList {
+        fn menu(&self) -> menu::Style {
+            menu::Style {
+                text_color: Color::WHITE,
+                background: Background::Color(Color::from_rgb8(57, 57, 76)),
+                selected_background: Background::Color(Color::from_rgb8(90, 90, 120)),
+                border_width: 0.0,
+                ..Default::default()
+            }
+        }
+
+        fn active(&self) -> pick_list::Style {
+            PickList::style()
+        }
+
+        fn hovered(&self) -> pick_list::Style {
+            PickList::style()
+        }
+    }
+
+    pub struct Slider;
+    impl Slider {
+        fn style() -> slider::Style {
+            slider::Style {
+                rail_colors: (Color::from_rgb8(137, 65, 69), Color::from_rgb8(137,65,69)),
+                handle: slider::Handle {
+                    shape: slider::HandleShape::Circle { radius: 8.0 },
+                    color: Color::from_rgb8(252, 107, 104),
+                    border_color: Color::TRANSPARENT,
+                    border_width: 0.0
+                },
+            }
+        }
+    }
+
+    impl slider::StyleSheet for Slider {
+        fn active(&self) -> slider::Style {
+            Slider::style()
+        }
+
+        fn hovered(&self) -> slider::Style {
+            Slider::style()
+        }
+
+        fn dragging(&self) -> slider::Style {
+            Slider::style()
+        }
+    }
+
+    pub const BOLD_FONT: [u8; 473160] = *include_bytes!("../../../../assets/FiraSans-SemiBold.ttf");
+    pub const NONBOLD_FONT: [u8; 440984] = *include_bytes!("../../../../assets/FiraSans-Regular.ttf");
 }
 
 fn username_text_handler(input: String) -> Message {

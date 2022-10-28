@@ -3,7 +3,7 @@
 
 use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{BufferSize, SampleFormat};
-use iced::{executor, Application, Element, Command, Settings, window::{self, Icon}, Subscription, keyboard::{self, KeyCode}};
+use iced::{executor, Application, Element, Command, Settings, window::{self, Icon}, Subscription, keyboard::{self, KeyCode}, Color};
 use iced_native::{event, subscription, Event};
 use log::{info, debug,  warn, error};
 use model_serde::serde::deserializer::ModelDeserializer;
@@ -77,11 +77,13 @@ pub fn main() -> iced::Result {
     let settings = Settings {
         window: window::Settings {
             size: (WINDOW_WIDTH, WINDOW_HEIGHT),
-            resizable: true,
-            decorations: true,
+            resizable: false,
+            decorations: false,
             icon: Some(Icon::from_rgba(ICON.to_vec(), 256, 256).unwrap()),
             ..Default::default()
         },
+        default_font: Some(&view::style::BOLD_FONT),
+        default_text_size: 18,
         ..Default::default()
     };
     App::run(settings)
@@ -264,6 +266,10 @@ impl Application for App {
     /// Controls the title bar of the application window
     fn title(&self) -> String {
         String::from("FakeYou Recast")
+    }
+
+    fn background_color(&self) -> Color {
+        Color::new(26.0, 26.0, 39.0, 1.0)
     }
 
     /// UI setup and state changes
