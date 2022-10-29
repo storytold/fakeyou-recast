@@ -1,6 +1,6 @@
 use crate::Message;
 use std::path::PathBuf;
-use iced::{Length, Text, Row, Column,  Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}, Space, Color};
+use iced::{Length, Text, Row, Column,  Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}, Space, Color, Rectangle};
 use iced_aw::{modal::{self, Modal}, card::{self, Card}};
 use iced_native::alignment::{Horizontal, Vertical};
 
@@ -116,44 +116,127 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
 
     let mut left_file_selection_col_elems: Vec<Element<Message>> = vec![];
     let mut right_file_selection_col_elems: Vec<Element<Message>> = vec![];
+    let selected_input_file_str = if view_state.input_browse_selected.is_none() { "no file selected" } else {view_state.input_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default() };
+    // FIXME find a way to change the opacity of these controls without defining them twice
     if view_state.input_device_list_selected == Some(String::from("From file"))
     {
-        let selected_input_file_str = if view_state.input_browse_selected.is_none() { "no file selected" } else {view_state.input_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default() };
         left_file_selection_col_elems.push(
             Row::new().spacing(5)
                 .push(
-                    Text::new("Input File:")
+                    Text::new("Input File:").color(Color::from_rgba8(255, 255, 255, 1.0))
                 )
                 .push(
                     Text::new(selected_input_file_str)
+                        .width(Length::Units(200))
+                        .height(Length::Units(14))
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
                         .size(14)
-                        .color(Color::from_rgb8(191, 134, 138))
+                        .color(Color::from_rgba8(191, 134, 138, 1.0))
                 )
             .into()
         );
         left_file_selection_col_elems.push(
-            Button::new(&mut view_state.input_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::InputBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
+            Button::new(
+                &mut view_state.input_browse_state,
+                Text::new("Browse")
+                    .color(Color::from_rgba8(255, 255, 255, 1.0))
+                    .horizontal_alignment(Horizontal::Center)
+                    .vertical_alignment(Vertical::Center)
+                )
+                .on_press(Message::InputBrowsePressed)
+                .style(style::Button::Grey)
+                .width(Length::Units(260))
+                .height(Length::Units(35))
+                .into()
+        );
+
+    }
+    else {
+        left_file_selection_col_elems.push(
+            Row::new().spacing(5)
+                .push(
+                    Text::new("Input File:").color(Color::from_rgba8(255, 255, 255, 0.30))
+                )
+                .push(
+                    Text::new(selected_input_file_str)
+                        .width(Length::Units(200))
+                        .height(Length::Units(14))
+                        .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                        .size(14)
+                        .color(Color::from_rgba8(191, 134, 138, 0.30))
+                )
+            .into()
+        );
+        left_file_selection_col_elems.push(
+            Button::new(
+                &mut view_state.input_browse_state,
+                Text::new("Browse")
+                    .color(Color::from_rgba8(255, 255, 255, 0.30))
+                    .horizontal_alignment(Horizontal::Center)
+                    .vertical_alignment(Vertical::Center)
+                )
+                .style(style::Button::GreyDisabled)
+                .width(Length::Units(260))
+                .height(Length::Units(35))
+                .into()
         );
     }
+
+        let selected_output_file_str = if view_state.output_browse_selected.is_none() { "no file selected" } else {view_state.output_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default() };
+
     if view_state.output_device_list_selected == Some(String::from("To file"))
     {
-        let selected_output_file_str = if view_state.output_browse_selected.is_none() { "no file selected" } else {view_state.output_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default() };
         right_file_selection_col_elems.push(
             Row::new().spacing(5)
                 .push(
-                    Text::new("Output File:")
+                    Text::new("Output File:").color(Color::from_rgba8(255, 255, 255, 1.0))
                 )
                 .push(
                     Text::new(selected_output_file_str)
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                        .width(Length::Units(186))
+                        .height(Length::Units(14))
+
                         .size(14)
-                        .color(Color::from_rgb8(191, 134, 138))
+                        .color(Color::from_rgba8(191, 134, 138, 1.0))
                 )
             .into()
         );
         right_file_selection_col_elems.push(
-            Button::new(&mut view_state.output_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::OutputBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
+            Button::new(&mut view_state.output_browse_state,
+                Text::new("Browse")
+                    .horizontal_alignment(Horizontal::Center)
+                    .vertical_alignment(Vertical::Center))
+                    .on_press(Message::OutputBrowsePressed)
+                    .style(style::Button::Grey)
+                    .width(Length::Units(260))
+                    .height(Length::Units(35)).into()
+        );
+    } else {
+        right_file_selection_col_elems.push(
+            Row::new().spacing(5)
+                .push(
+                    Text::new("Output File:").color(Color::from_rgba8(255, 255, 255, 0.30))
+                )
+                .push(
+                    Text::new(selected_output_file_str)
+                        .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                        .width(Length::Units(186))
+                        .height(Length::Units(14))
+                        .size(14)
+                        .color(Color::from_rgba8(191, 134, 138, 0.30))
+                )
+            .into()
+        );
+        right_file_selection_col_elems.push(
+            Button::new(&mut view_state.output_browse_state,
+                Text::new("Browse")
+                    .color(Color::from_rgba8(255, 255, 255, 0.30))
+                    .horizontal_alignment(Horizontal::Center)
+                    .vertical_alignment(Vertical::Center))
+                    .style(style::Button::GreyDisabled)
+                    .width(Length::Units(260))
+                    .height(Length::Units(35)).into()
         );
     }
 
@@ -329,7 +412,9 @@ pub mod style {
 
     pub enum Button {
         Red,
+        RedDisabled,
         Grey,
+        GreyDisabled,
     }
 
     impl button::StyleSheet for Button {
@@ -347,6 +432,22 @@ pub mod style {
                     button::Style {
                     text_color: Color::WHITE,
                         background: Some(Background::Color(Color::from_rgb8(57, 57, 76))),
+                        border_radius: 5.0,
+                        ..button::Style::default()
+                    }
+                }
+                Button::RedDisabled => { 
+                    button::Style {
+                        text_color: Color::WHITE,
+                        background: Some(Background::Color(Color::from_rgba8(252, 107, 104, 0.30))),
+                        border_radius: 5.0,
+                        ..button::Style::default()
+                    }
+                }
+                Button::GreyDisabled => {
+                    button::Style {
+                    text_color: Color::WHITE,
+                        background: Some(Background::Color(Color::from_rgba8(57, 57, 76, 0.30))),
                         border_radius: 5.0,
                         ..button::Style::default()
                     }

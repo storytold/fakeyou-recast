@@ -80,7 +80,7 @@ pub fn main() -> iced::Result {
         window: window::Settings {
             size: (WINDOW_WIDTH, WINDOW_HEIGHT),
             resizable: false,
-            decorations: false,
+            //decorations: false, // this removes the menubar
             icon: Some(Icon::from_rgba(ICON.to_vec(), 256, 256).unwrap()),
             ..Default::default()
         },
