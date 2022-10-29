@@ -96,7 +96,7 @@ pub fn apply_volume(sample: f32, volume: f32) -> f32 {
 }
 
 /// Play a 16KHz mono audio buffer on a given sample rate/channels target, applying the chosen volume
-pub fn play_audio_buf(output_device: DeviceType, buf: Vec<f32>, volume: f32) -> Result<(), AppError> {
+pub fn play_audio_vec(output_device: DeviceType, buf: Vec<f32>, receiver: std::sync::mpsc::Receiver<(bool, f32)>) -> Result<(), AppError> {
     match output_device {
         DeviceType::File((f, _)) => {
             let spec = hound::WavSpec {
@@ -107,7 +107,7 @@ pub fn play_audio_buf(output_device: DeviceType, buf: Vec<f32>, volume: f32) -> 
             };
             let mut writer = hound::WavWriter::new(f, spec).map_err(|e| AppError::HoundError(e))?;
             for sample in buf.iter() {
-                writer.write_sample(apply_volume(*sample, volume)).map_err(|e| AppError::HoundError(e))?;
+                writer.write_sample(apply_volume(*sample, unsafe { crate::OUTPUT_VOLUME })).map_err(|e| AppError::HoundError(e))?;
             }
             writer.finalize().map_err(|e| AppError::HoundError(e))?;
         },
@@ -153,7 +153,7 @@ pub fn play_audio_buf(output_device: DeviceType, buf: Vec<f32>, volume: f32) -> 
                         let data_slice: &mut [f32] = data.as_slice_mut().unwrap(); 
                         for (j, sample) in data_slice.iter_mut().enumerate() {
                             let s = output_vec[i];
-                            *sample = apply_volume(s, volume);
+                            *sample = apply_volume(s, unsafe { crate::OUTPUT_VOLUME });
                             // Expand one sample to n_channels samples
                             // ie mono to stereo
                             if j%(out_n_channels as usize) == 0 && i < output_vec.len() - 1
@@ -168,7 +168,7 @@ pub fn play_audio_buf(output_device: DeviceType, buf: Vec<f32>, volume: f32) -> 
                         let data_slice: &mut [i16] = data.as_slice_mut().unwrap(); 
                         for (j, sample) in data_slice.iter_mut().enumerate() {
                             let s = output_vec[i];
-                            *sample = float_to_pcm_s16(apply_volume(s, volume));
+                            *sample = float_to_pcm_s16(apply_volume(s, unsafe { crate::OUTPUT_VOLUME }));
                             // Expand one sample to n_channels samples
                             // ie mono to stereo
                             if j%(out_n_channels as usize) == 0 && i < output_vec.len() - 1
@@ -196,13 +196,24 @@ pub fn play_audio_buf(output_device: DeviceType, buf: Vec<f32>, volume: f32) -> 
             }?;
             
 
+            let start_time = std::time::Instant::now();
             output_stream.play().map_err(|e| AppError::PlayStreamError("output", e))?;
-            std::thread::sleep(core::time::Duration::from_secs_f32(playback_secs));
+            while std::time::Instant::now() < (start_time + core::time::Duration::from_secs_f32(playback_secs)) {
+            let (playing, ovol) = receiver.recv().map_err(|e| AppError::ChannelRecvError(e))?;
+                if playing {
+                    //FIXME unsafe
+                    unsafe { unsafe { crate::OUTPUT_VOLUME = ovol } };
+                } else {
+                    break;
+                }
+                std::thread::sleep(core::time::Duration::from_millis(50));
+            }
         }
         DeviceType::None => {
             Err(AppError::NoDevice("output"))?
         }
     }
+    info!("Finished playing");
     Ok(())
 }
 

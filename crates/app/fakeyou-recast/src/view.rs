@@ -53,7 +53,7 @@ impl ViewState{
         view_state
     }
 }
-pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a Vec<String>, output_device_list_options: &'a Vec<String>, recording: bool, realtime_recording: bool) -> Element<'a, Message> {
+pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a Vec<String>, output_device_list_options: &'a Vec<String>, recording: bool, realtime_recording: bool, playing_source: bool, playing_target: bool) -> Element<'a, Message> {
     let empty_pathbuf = PathBuf::from("");
 
     // NB: New model selection
@@ -308,32 +308,28 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
             Row::new().spacing(10)
             .push(
                 Button::new(&mut view_state.record_state, 
-                    if view_state.input_device_list_selected == Some(String::from("From file")) { Text::new("Read File").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center) }
-                    else if recording { Text::new("Stop")}
-                    else {Text::new("Record").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)}).on_press(Message::RecordPressed)
+                    Text::new( if view_state.input_device_list_selected == Some(String::from("From file")) { "Read File" } else if recording { "Stop" } else { "Record"} ).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
+                    .on_press(Message::RecordPressed)
                     .style(style::Button::Red)
                     .width(Length::Units(130))
                     .height(Length::Units(35))
             )
             .push(
-                Button::new(&mut view_state.play_source_state, Text::new("Play Source").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::PlaySourcePressed)
+                Button::new(&mut view_state.play_source_state, Text::new(if playing_source { "Stop" } else { "Play Source" }).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::PlaySourcePressed)
                 .style(style::Button::Red)
                 .width(Length::Units(130))
                 .height(Length::Units(35))
             )
             .push(
                 Button::new(&mut view_state.play_target_state, 
-                    if view_state.output_device_list_selected == Some(String::from("To file")) { Text::new("Write File").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)}
-                    else {
-                        Text::new("Play Target").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)
-                    })
+                    Text::new(if view_state.output_device_list_selected == Some(String::from("To file")) {"Write File"} else if playing_target { "Stop" } else { "Play Target"}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
                     .on_press(Message::PlayTargetPressed)
                     .style(style::Button::Red)
                     .width(Length::Units(130))
                     .height(Length::Units(35))
             )
             .push(
-                Button::new(&mut view_state.realtime_record_state, if realtime_recording { Text::new("Stop") } else {Text::new("Realtime").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)}).on_press(Message::RealtimeRecordPressed)
+                Button::new(&mut view_state.realtime_record_state, Text::new(if realtime_recording { "Stop" } else { "Realtime"}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::RealtimeRecordPressed)
                 .style(style::Button::Red)
                 .width(Length::Units(130))
                 .height(Length::Units(35))

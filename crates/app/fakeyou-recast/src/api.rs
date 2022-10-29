@@ -2,7 +2,7 @@ use thiserror::Error;
 use std::collections::HashMap;
 use crate::Message;
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum ApiError {
     #[error("Incorrect username or password entered.")]
     InvalidLoginCredentials,

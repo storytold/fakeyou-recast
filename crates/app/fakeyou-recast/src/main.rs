@@ -10,7 +10,7 @@ use model_serde::serde::deserializer::ModelDeserializer;
 use native_dialog::{FileDialog, MessageDialog};
 use ringbuf::RingBuffer;
 use rubato::{FftFixedInOut, Resampler};
-use std::{path::PathBuf, env, io::Write};
+use std::{path::PathBuf, env, io::Write, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex, mpsc}};
 use thiserror::Error;
 
 mod api;
@@ -25,6 +25,7 @@ use audio::DeviceType;
 use consts::*;
 use crate::discord::spawn_discord_thread;
 use softvc::Model;
+use api::ApiError;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -85,7 +86,7 @@ pub fn main() -> iced::Result {
             ..Default::default()
         },
         default_font: Some(&view::style::BOLD_FONT),
-        default_text_size: 18,
+        default_text_size: 14,
         ..Default::default()
     };
     App::run(settings)
@@ -143,11 +144,43 @@ struct App {
     output_device_list_options: Vec<String>,
     session_token: Option<String>,
     userdata: Option<json::JsonValue>,
-    record_sender: Option<std::sync::mpsc::Sender<(bool, f32)>>,
-    realtime_record_sender: Option<std::sync::mpsc::Sender<(bool, f32, f32)>>,
+    record_sender: Option<mpsc::Sender<(bool, f32)>>,
+    realtime_record_sender: Option<mpsc::Sender<(bool, f32, f32)>>,
+    play_target_sender: Option<mpsc::Sender<(bool, f32)>>,
+    play_source_sender: Option<mpsc::Sender<(bool, f32)>>,
     recording: bool,
     realtime_recording: bool,
-    record_vec: Vec<f32>,
+    playing_source: bool,
+    playing_target: bool,
+    cpu_mode: bool,
+    offline_mode: bool,
+    record_vec: RecordVector,
+}
+
+#[derive(Debug, Clone)]
+/*struct RecordVector(Arc<Vec<f32>>);
+impl RecordVector {
+    pub fn new() -> RecordVector {
+        Self(Arc::new(Vec::<f32>::new()))
+    }
+    pub fn set_contents(&self, inner: Vec<f32>)  {
+        *self.0 = inner;
+    }
+    pub fn get_contents(&self) -> Vec<f32> {
+        *self.0
+    }
+}*/
+struct RecordVector(Vec<f32>);
+impl RecordVector {
+    pub fn new() -> RecordVector {
+        Self(Vec::new())
+    }
+    pub fn set_contents(&mut self, inner: Vec<f32>) {
+        self.0 = inner;
+    }
+    pub fn get_contents(&self) -> Vec<f32> {
+        self.0.clone()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -172,9 +205,9 @@ pub enum Message {
     PasswordChanged(String),
     LoginPressed,
     LoginSuccess(String),
-    LoginFailed(api::ApiError),
+    LoginFailed(ApiError),
     SessionValid(json::JsonValue),
-    SessionFailed(api::ApiError),
+    SessionFailed(ApiError),
     None
 }
 
@@ -211,11 +244,17 @@ impl Application for App {
         let recording = false;
         let record_sender = None;
         let realtime_record_sender = None;
+        let play_target_sender = None;
+        let play_source_sender = None;
         let realtime_recording = false;
+        let playing_source = false;
+        let playing_target = false;
         let mut input_device_list_options = audio::get_input_device_list();
         input_device_list_options.insert(0, String::from("From file"));
         let mut output_device_list_options: Vec<String> = audio::get_output_device_list();
         output_device_list_options.insert(0, String::from("To file"));
+        let mut cpu_mode = false;
+        let offline_mode = false;
 
 
         let mut session_token = None;
@@ -224,13 +263,14 @@ impl Application for App {
             session_token = Some(string);
         }
 
-        let record_vec = Vec::new();
+        let record_vec = RecordVector::new();
 
         view_state.login_modal_state.show(true);
 
         tch::maybe_init_cuda();
         if !tch::Cuda::is_available() {
             handle_errors(Err(AppError::NoCuda));
+            cpu_mode = true;
         }
 
         let command;
@@ -242,7 +282,7 @@ impl Application for App {
         }
 
         let launch_location = env::current_dir()
-            .map_err(|err| println!("startup directory could not be found: {:?}", err))
+            .map_err(|err| error!("startup directory could not be found: {:?}", err))
             .unwrap_or(PathBuf::from(""));
 
         (
@@ -262,7 +302,13 @@ impl Application for App {
                 record_sender,
                 realtime_recording,
                 realtime_record_sender,
+                play_target_sender,
+                play_source_sender,
+                playing_source,
+                playing_target,
                 record_vec,
+                cpu_mode,
+                offline_mode,
             },
             command
         )
@@ -278,7 +324,7 @@ impl Application for App {
     }
 
     /// UI setup and state changes
-    fn view(&mut self) -> Element<Message> { view::view(&mut self.view_state, &self.input_device_list_options, &self.output_device_list_options, self.recording, self.realtime_recording) }
+    fn view(&mut self) -> Element<Message> { view::view(&mut self.view_state, &self.input_device_list_options, &self.output_device_list_options, self.recording, self.realtime_recording, self.playing_source, self.playing_target) }
 
     /// Respond to messages from the UI with appropriate actions
     fn update(&mut self, msg: Self::Message) -> Command<Self::Message> {
@@ -493,9 +539,6 @@ impl Application for App {
                         if let Some(e) = res.err() {
                             error!("{}", e);
                         }
-                        //handle_errors(res); 
-                        //This error is kind of pointless because it's usually
-                        //the result of another error, ignoring it to avoid spam
                         self.recording = !self.recording;
                     }
                 } else {
@@ -510,8 +553,8 @@ impl Application for App {
                     };
 
                     command = Command::perform(start_recording(input_device, record_receiver), handle_recording); 
-                    if input_device_name != Some(String::from("From file")) {
-                        self.record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone())).unwrap();
+                    if input_device_name != Some(String::from("From file")) && self.record_sender.is_some() {
+                        let _ = self.record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone()));
                         self.recording = !self.recording;
                     }
                 }
@@ -519,67 +562,82 @@ impl Application for App {
 
             }
             Message::PlayTargetPressed => {
-                let output_device_name = self.view_state.output_device_list_selected.clone();
-                let output_file = self.view_state.output_browse_selected.clone();
-                let hubert = self.hubert.clone();
-                let acoustic = self.acoustic.clone();
-                let hifigan = self.hifigan.clone();
-                let vad = self.vad.clone();
+                if self.playing_target {
+                    if self.play_target_sender.is_some()
+                    {
+                        let res = self.play_target_sender.as_ref().unwrap().send((false, self.view_state.slider_2_value.clone()));
+                        if let Some(e) = res.err() {
+                            error!("{}", e);
+                        }
+                        self.playing_target = !self.playing_target;
+                    }
+                } else {
+                    let (play_target_sender, play_target_receiver) = std::sync::mpsc::channel();
+                    self.play_target_sender = Some(play_target_sender);
 
-                let output_device_res = audio::get_output_device(output_device_name, output_file);
-                let mut output_device = audio::DeviceType::None;
-                match output_device_res {
-                    Err(e) => { handle_errors(Err(e)); },
-                    Ok(out) => { output_device = out; }
-                };
-                //FIXME kind of a big clone
-                command = Command::perform(play_target(self.record_vec.clone(), hubert, acoustic, hifigan, vad, output_device), handle_errors)
+                    let output_device_name = self.view_state.output_device_list_selected.clone();
+                    let output_file = self.view_state.output_browse_selected.clone();
+                    let hubert = self.hubert.clone();
+                    let acoustic = self.acoustic.clone();
+                    let hifigan = self.hifigan.clone();
+                    let vad = self.vad.clone();
+
+                    let output_device_res = audio::get_output_device(output_device_name.clone(), output_file);
+                    let mut output_device = audio::DeviceType::None;
+                    match output_device_res {
+                        Err(e) => { handle_errors(Err(e)); },
+                        Ok(out) => { output_device = out; }
+                    };
+                    command = Command::perform(play_target(self.record_vec.get_contents(), hubert, acoustic, hifigan, vad, output_device, play_target_receiver), handle_errors);
+
+                    if output_device_name != Some(String::from("To file")) && self.play_target_sender.is_some() {
+                        self.play_target_sender.as_ref().unwrap().send((true, self.view_state.slider_2_value.clone())).unwrap();
+                        self.playing_target = !self.playing_target;
+                    }
+                }
             }
             Message::PlaySourcePressed => { 
-                let output_device_name = self.view_state.output_device_list_selected.clone();
+                if self.playing_source {
+                    if self.play_source_sender.is_some()
+                    {
+                        let res = self.play_source_sender.as_ref().unwrap().send((false, self.view_state.slider_2_value.clone()));
+                        if let Some(e) = res.err() {
+                            error!("{}", e);
+                        }
+                        self.playing_source = !self.playing_source;
+                    }
+                } else {
+                    let (play_source_sender, play_source_receiver) = std::sync::mpsc::channel();
+                    self.play_source_sender = Some(play_source_sender);
 
-                // pass None for file because playing source to file is pointless and confusing
-                let output_device_res = audio::get_output_device(output_device_name, None);
-                let mut output_device = audio::DeviceType::None;
-                match output_device_res {
-                    Err(e) => { handle_errors(Err(e)); },
-                    Ok(out) => { output_device = out; }
-                };
-                //FIXME kind of a big clone
-                command = Command::perform(play_source(self.record_vec.clone(), output_device), handle_errors)
+                    let output_device_name = self.view_state.output_device_list_selected.clone();
+
+                    // pass None for file because playing source to file is pointless and confusing
+                    let output_device_res = audio::get_output_device(output_device_name, None);
+                    let mut output_device = audio::DeviceType::None;
+                    match output_device_res {
+                        Err(e) => { handle_errors(Err(e)); },
+                        Ok(out) => { output_device = out; }
+                    };
+                    command = Command::perform(play_source(self.record_vec.get_contents(), output_device, play_source_receiver), handle_errors);
+
+                    if self.play_source_sender.is_some() {
+                        self.play_source_sender.as_ref().unwrap().send((true, self.view_state.slider_2_value.clone())).unwrap();
+                        self.playing_source = !self.playing_source;
+                    }
+                }
             }
             Message::InputDeviceChanged(new_device) => {
                 info!("Selected {} for input", new_device);
                 self.view_state.input_device_list_selected = Some(new_device);
-                // Restart recording if currently recording and the device changes
-                //if self.realtime_recording {
-                    //self.realtime_record_sender.as_ref().unwrap().send((false, self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone())).unwrap();
-                    //let (realtime_record_sender, realtime_record_receiver) = std::sync::mpsc::channel();
-                    //self.realtime_record_sender = Some(realtime_record_sender);
-                    //let input_device_name = self.view_state.input_device_list_selected.clone();
-                    //let output_device_name = self.view_state.output_device_list_selected.clone();
-                    //std::thread::spawn(move || { start_realtime(realtime_record_receiver, input_device_name, output_device_name) }); 
-                    //self.realtime_record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone())).unwrap();
-                //}
             }
             Message::OutputDeviceChanged(new_device) => {
                 info!("Selected {} for output", new_device);
                 self.view_state.output_device_list_selected = Some(new_device);
-                // Restart recording if currently recording and the device changes
-                //if self.realtime_recording {
-                    //self.realtime_record_sender.as_ref().unwrap().send((false, self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone())).unwrap();
-                    //let (realtime_record_sender, realtime_record_receiver) = std::sync::mpsc::channel();
-                    //self.realtime_record_sender = Some(realtime_record_sender);
-                    //let input_device_name = self.view_state.input_device_list_selected.clone();
-                    //let output_device_name = self.view_state.output_device_list_selected.clone();
-                    //std::thread::spawn(move || { start_realtime(realtime_record_receiver, input_device_name, output_device_name) }); 
-                    //self.realtime_record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone())).unwrap();
-                //}
-
             }
 
             Message::RecordingFinished(vec) => {
-                self.record_vec = vec;
+                self.record_vec.set_contents(vec);
             }
             Message::UsernameChanged(username) => {
                 self.view_state.login_modal_state.inner_mut().username_field_value = username;
@@ -598,19 +656,27 @@ impl Application for App {
                     Ok(mut file) => { let _ = file.write_all(token.as_bytes()); },
                     Err(e) => { error!("Failed to write the session token to file: {}", e); }
                 }
+                self.offline_mode = false;
                 self.view_state.login_modal_state.inner_mut().login_failed = false;
                 self.view_state.login_modal_state.show(false);
             }
             Message::LoginFailed(e) => {
                 self.view_state.login_modal_state.inner_mut().login_err_msg = format!("{}", e);
                 self.view_state.login_modal_state.inner_mut().login_failed = true;
+                if e == ApiError::ReqwestError {
+                    self.offline_mode = true;
+                }
             }
             Message::SessionValid(user) => {
+                self.offline_mode = false;
                 self.userdata = Some(user);
                 self.view_state.login_modal_state.show(false);
             }
             Message::SessionFailed(e) => {
                 error!("Error validating session: {}", e);
+                if e == ApiError::ReqwestError {
+                    self.offline_mode = true;
+                }
             }
             Message::None => { }
         }
@@ -653,7 +719,7 @@ impl App {
         match path {
             Ok(Some(p)) => {
                 let model = self.model_deserializer.read_full_model_file(&p)
-                    .map_err(|e| AppError::FileDialogError(model_directory.clone()))?;
+                    .map_err(|_e| AppError::FileDialogError(model_directory.clone()))?;
 
                 let acoustic = self.acoustic.clone();
                 let hifigan = self.hifigan.clone();
@@ -687,7 +753,7 @@ impl App {
                 });
             },
             Ok(None) => {},
-            Err(_e) => { /*handle_errors(Err(AppError::FileDialogError(location)));*/ }
+            Err(_e) => { handle_errors(Err(AppError::FileDialogError(model_directory))); }
         }
         //FIXME some kind of progress bar while all this crap loads
         Ok(())
@@ -699,7 +765,7 @@ impl App {
 async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32, f32)>, input_device: audio::DeviceType, output_device: audio::DeviceType, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, vad: vad::Vad) -> Result<(), AppError>
 {
     info!("Started realtime recording from {} with playback on {}", input_device, output_device);
-    let arc_cancel_token = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let arc_cancel_token = std::sync::Arc::new(AtomicBool::new(false));
     let cancel_token1 = arc_cancel_token.clone();
     let cancel_token2 = arc_cancel_token.clone();
     let cancel_token3 = arc_cancel_token.clone();
@@ -844,10 +910,10 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
                     match vad_res {
                         Err(e) => {
                             // don't spam errors if there's already one known
-                            if !cancel_token1.load(std::sync::atomic::Ordering::Relaxed) {
+                            if !cancel_token1.load(Ordering::Relaxed) {
                                 handle_errors(Err(e));
                             }
-                            cancel_token1.store(true, std::sync::atomic::Ordering::Relaxed);
+                            cancel_token1.store(true, Ordering::Relaxed);
                         },
                         Ok(t) => {
                             vad_tensor = t;
@@ -861,10 +927,10 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
                 match res {
                     Err(e) => {
                         // don't spam errors if there's already one known
-                        if !cancel_token1.load(std::sync::atomic::Ordering::Relaxed) {
+                        if !cancel_token1.load(Ordering::Relaxed) {
                             handle_errors(Err(e));
                         }
-                        cancel_token1.store(true, std::sync::atomic::Ordering::Relaxed);
+                        cancel_token1.store(true, Ordering::Relaxed);
                     },
                     Ok(samples) => {
                         resampler2_input_buffer[0].iter_mut().zip(
@@ -896,7 +962,7 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
                     }
                 }
                 let processing_end_time = std::time::Instant::now();
-                if cancel_token3.load(std::sync::atomic::Ordering::Relaxed) {
+                if cancel_token3.load(Ordering::Relaxed) {
                     break;
                 }
                 let processing_time = processing_end_time - processing_start_time;
@@ -944,7 +1010,7 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
     input_stream.play().map_err(|e| AppError::PlayStreamError("input", e))?;
     output_stream.play().map_err(|e| AppError::PlayStreamError("output", e))?;
     loop {
-        if cancel_token2.load(std::sync::atomic::Ordering::Relaxed) {
+        if cancel_token2.load(Ordering::Relaxed) {
             //FIXME set the button text back to realtime instead of leaving it as stop when an
             //error is encountered.
             break;
@@ -959,7 +1025,7 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
             break;
         }
     }
-    cancel_token4.store(true, std::sync::atomic::Ordering::Relaxed);
+    cancel_token4.store(true, Ordering::Relaxed);
     Ok(())
 }
 
@@ -971,14 +1037,14 @@ async fn start_recording(input_device: audio::DeviceType, receiver: std::sync::m
 }
 
 /// Play back the input buffer
-async fn play_source(source: Vec<f32>, output_device: audio::DeviceType) -> Result<(), AppError> {
+async fn play_source(source: Vec<f32>, output_device: audio::DeviceType, play_source_receiver: mpsc::Receiver<(bool, f32)>) -> Result<(), AppError> {
     info!("Playing source audio on {}", output_device);
     debug!("source first 20 samples {:?}", source[0..20].to_vec());
-    audio::play_audio_buf(output_device, source, unsafe { OUTPUT_VOLUME })
+    audio::play_audio_vec(output_device, source, play_source_receiver)
 }
 
 /// Convert and play back the input buffer with the target voice
-async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, vad: vad::Vad, output_device: audio::DeviceType) -> Result<(), AppError> {
+async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, vad: vad::Vad, output_device: audio::DeviceType, play_target_receiver: mpsc::Receiver<(bool, f32)>) -> Result<(), AppError> {
     //TODO some kind of loading spinner or something while this is happening
     info!("Running inference and playing target audio on {}", output_device);
     debug!("first 20 recorded samples: {:?}", source[..20].to_vec());
@@ -988,8 +1054,8 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
             let spec = hound::WavSpec {
                 channels: 1,
                 sample_rate: MODEL_SAMPLE_RATE as u32,
-                bits_per_sample: 32,
-                sample_format: hound::SampleFormat::Float,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
             };
             let mut writer = hound::WavWriter::new(f, spec).map_err(|e| AppError::HoundError(e))?;
             'outer: for chunk in source.chunks(OFFLINE_CHUNK_SIZE) {
@@ -1024,7 +1090,7 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
                     }
                 }
                 for sample in out_samples.iter() {
-                    writer.write_sample(audio::apply_volume(*sample, unsafe { OUTPUT_VOLUME })).map_err(|e| AppError::HoundError(e))?;
+                    writer.write_sample(audio::float_to_pcm_s16(audio::apply_volume(*sample, unsafe { OUTPUT_VOLUME }))).map_err(|e| AppError::HoundError(e))?;
                 }
             }
             writer.finalize().map_err(|e| AppError::HoundError(e))?;
@@ -1052,9 +1118,6 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
             let output_chunk_size = out_rate * resampler_input_size / MODEL_SAMPLE_RATE * n_channels;
             let ring: RingBuffer<f32> = RingBuffer::new(output_chunk_size*2);
             let (mut producer, mut consumer) = ring.split();
-            let ring2: RingBuffer<f32> = RingBuffer::new(resampler_input_size*2);
-            let (mut producer2, mut consumer2) = ring2.split();
-
 
             let arc_cancel_token = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let cancel_token1 = arc_cancel_token.clone();
@@ -1188,6 +1251,15 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
             if cancel_token2.load(std::sync::atomic::Ordering::Relaxed) || std::time::Instant::now() > stop_time {
                 break;
             }
+
+            let (playing_target, ovol) = play_target_receiver.recv().map_err(|e| AppError::ChannelRecvError(e))?;
+            if playing_target {
+                //FIXME unsafe
+                unsafe { OUTPUT_VOLUME = ovol };
+            } else {
+                break;
+            }
+
             std::thread::sleep(core::time::Duration::from_millis(50));
         }
         cancel_token2.store(true, std::sync::atomic::Ordering::Relaxed);
