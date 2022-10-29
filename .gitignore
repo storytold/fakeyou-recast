@@ -3,6 +3,7 @@ logs/
 samples/
 *.wav
 *.recast
+*.fakeyou
 *.recast_base
 *.pt
 *.jit

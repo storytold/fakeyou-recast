@@ -17,10 +17,16 @@ pub struct ViewState {
     pub hubert_browse_state: button::State,
     pub input_browse_state: button::State,
     pub output_browse_state: button::State,
+    pub download_button_state: button::State,
+    pub model_download_list_refresh_button_state: button::State,
+    pub local_model_load_state: button::State,
+    pub local_model_refresh_state: button::State,
     pub slider_1_state: slider::State,
     pub slider_2_state: slider::State,
     pub input_device_list_state: pick_list::State<String>,
     pub output_device_list_state: pick_list::State<String>,
+    pub model_download_list_state: pick_list::State<crate::api::AppModelDownloadsItem>,
+    pub local_model_list_state: pick_list::State<crate::local::LocalModelListItem>,
     pub fakeyou_model_browse_selected: Option<PathBuf>,
     pub model_browse_selected: Option<PathBuf>,
     pub hifigan_browse_selected: Option<PathBuf>,
@@ -29,6 +35,8 @@ pub struct ViewState {
     pub input_device_list_selected: Option<String>,
     pub output_device_list_selected: Option<String>,
     pub output_browse_selected: Option<PathBuf>,
+    pub model_download_list_selected: Option<crate::api::AppModelDownloadsItem>,
+    pub local_model_list_selected: Option<crate::local::LocalModelListItem>,
     pub slider_1_value: f32,
     pub slider_2_value: f32,
     pub show_debug: bool,
@@ -53,11 +61,86 @@ impl ViewState{
         view_state
     }
 }
-pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a Vec<String>, output_device_list_options: &'a Vec<String>, recording: bool, realtime_recording: bool) -> Element<'a, Message> {
+
+pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a Vec<String>, output_device_list_options: &'a Vec<String>, model_download_list_options: &'a Vec<crate::api::AppModelDownloadsItem>, local_model_options: &'a Vec<crate::local::LocalModelListItem>, recording: bool, realtime_recording: bool) -> Element<'a, Message> {
     let empty_pathbuf = PathBuf::from("");
 
+    // Model Downloads
+    let mut model_download_elems: Vec<Element<Message>> = vec![];
+    model_download_elems
+            .push(Text::new("Downloadable Models: ").into());
+    model_download_elems.push(
+    Row::new().spacing(12).push(
+        PickList::new(
+            &mut view_state.model_download_list_state,
+            model_download_list_options,
+            view_state.model_download_list_selected.clone(),
+            Message::ModelDownloadListSelected,
+        )
+        .padding(8)
+        .style(style::PickList)
+        .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+        .width(Length::Units(350))
+    ).push(
+        Button::new(&mut view_state.model_download_list_refresh_button_state, 
+            Text::new("Refresh")
+                .horizontal_alignment(Horizontal::Center)
+                .vertical_alignment(Vertical::Center))
+            .style(style::Button::Grey)
+            .height(Length::Units(35))
+            .width(Length::Units(90))
+            .on_press(Message::ModelDownloadListRefreshPressed)
+    )
+    .push(
+        Button::new(&mut view_state.download_button_state, Text::new("Download")
+            .horizontal_alignment(Horizontal::Center)
+            .vertical_alignment(Vertical::Center))
+        .style(style::Button::Grey)
+        .height(Length::Units(35))
+        .width(Length::Units(90))
+
+        .on_press(Message::ModelDownloadPressed(view_state.model_download_list_selected.clone()))
+    ).into());
+
+    // Local Models
+    let mut local_model_elems: Vec<Element<Message>> = vec![];
+    local_model_elems.push(
+        Text::new("Local Models: ").into());
+    local_model_elems.push(
+    Row::new().spacing(12).push(
+        PickList::new(
+            &mut view_state.local_model_list_state,
+            local_model_options,
+            view_state.local_model_list_selected.clone(),
+            Message::LocalModelListSelected,
+        )
+        .padding(8)
+        .style(style::PickList)
+        .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+        .width(Length::Units(350))
+    )
+    .push(
+        Button::new(&mut view_state.local_model_refresh_state, Text::new("Refresh")
+                .horizontal_alignment(Horizontal::Center)
+                .vertical_alignment(Vertical::Center))
+            .style(style::Button::Grey)
+            .height(Length::Units(35))
+            .width(Length::Units(90))
+            .on_press(Message::LocalModelRefreshPressed)
+    )
+    .push(
+        Button::new(&mut view_state.local_model_load_state, Text::new("Load")
+                .horizontal_alignment(Horizontal::Center)
+                .vertical_alignment(Vertical::Center))
+            .style(style::Button::Grey)
+            .height(Length::Units(35))
+            .width(Length::Units(90))
+            .on_press(Message::LocalModelLoadPressed(view_state.local_model_list_selected.clone()))
+    ).into());
+
+    
     // NB: New model selection
-    let mut fakeyou_model_selection_col_elems: Vec<Element<Message>> = vec![];
+    /*let mut fakeyou_model_selection_col_elems: Vec<Element<Message>> = vec![];
     let selected_fakeyou_model_str = if view_state.fakeyou_model_browse_selected.is_none() { "no file selected" } else {view_state.fakeyou_model_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
 
     fakeyou_model_selection_col_elems
@@ -98,7 +181,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 ).into()
         );
     left_model_selection_col_elems.push(
-        Button::new(&mut view_state.model_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::ModelBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
+        Button::new(&mut view_state.model_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::ModelBrowsePressed).style(style::Button::Grey).width(Length::Units(262)).height(Length::Units(35)).into()
     );
     right_model_selection_col_elems.push(
             Row::new().spacing(5)
@@ -110,8 +193,8 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 ).into()
     );
     right_model_selection_col_elems.push(
-        Button::new(&mut view_state.hifigan_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::HifiganBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
-    );
+        Button::new(&mut view_state.hifigan_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::HifiganBrowsePressed).style(style::Button::Grey).width(Length::Units(262)).height(Length::Units(35)).into()
+    );*/
 
 
     let mut left_file_selection_col_elems: Vec<Element<Message>> = vec![];
@@ -128,9 +211,9 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 .push(
                     Text::new(selected_input_file_str)
                         .width(Length::Units(200))
-                        .height(Length::Units(14))
+                        .height(Length::Units(12))
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
-                        .size(14)
+                        .size(12)
                         .color(Color::from_rgba8(191, 134, 138, 1.0))
                 )
             .into()
@@ -145,7 +228,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 )
                 .on_press(Message::InputBrowsePressed)
                 .style(style::Button::Grey)
-                .width(Length::Units(260))
+                .width(Length::Units(262))
                 .height(Length::Units(35))
                 .into()
         );
@@ -160,9 +243,9 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 .push(
                     Text::new(selected_input_file_str)
                         .width(Length::Units(200))
-                        .height(Length::Units(14))
+                        .height(Length::Units(12))
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
-                        .size(14)
+                        .size(12)
                         .color(Color::from_rgba8(191, 134, 138, 0.30))
                 )
             .into()
@@ -176,7 +259,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     .vertical_alignment(Vertical::Center)
                 )
                 .style(style::Button::GreyDisabled)
-                .width(Length::Units(260))
+                .width(Length::Units(262))
                 .height(Length::Units(35))
                 .into()
         );
@@ -195,9 +278,8 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     Text::new(selected_output_file_str)
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
                         .width(Length::Units(186))
-                        .height(Length::Units(14))
-
-                        .size(14)
+                        .height(Length::Units(12))
+                        .size(12)
                         .color(Color::from_rgba8(191, 134, 138, 1.0))
                 )
             .into()
@@ -209,7 +291,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     .vertical_alignment(Vertical::Center))
                     .on_press(Message::OutputBrowsePressed)
                     .style(style::Button::Grey)
-                    .width(Length::Units(260))
+                    .width(Length::Units(262))
                     .height(Length::Units(35)).into()
         );
     } else {
@@ -222,8 +304,8 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     Text::new(selected_output_file_str)
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
                         .width(Length::Units(186))
-                        .height(Length::Units(14))
-                        .size(14)
+                        .height(Length::Units(12))
+                        .size(12)
                         .color(Color::from_rgba8(191, 134, 138, 0.30))
                 )
             .into()
@@ -235,18 +317,22 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     .horizontal_alignment(Horizontal::Center)
                     .vertical_alignment(Vertical::Center))
                     .style(style::Button::GreyDisabled)
-                    .width(Length::Units(260))
+                    .width(Length::Units(262))
                     .height(Length::Units(35)).into()
         );
     }
 
     let main_container = Container::new(
         Column::new().spacing(7)
-        .push(fakeyou_model_selection_row)
+        .push(Column::with_children(model_download_elems).spacing(10))
+        .push(Space::with_height(Length::Units(17)))
+        .push(Column::with_children(local_model_elems).spacing(10))
+        //.push(fakeyou_model_selection_row)
+        .push(Space::with_height(Length::Units(17)))
         .push(
-            Row::new().spacing(33).push( 
+            Row::new().spacing(30).push( 
                 Column::new().spacing(7)
-                    .push(Column::with_children(left_model_selection_col_elems).spacing(7))
+                    //.push(Column::with_children(left_model_selection_col_elems).spacing(7))
                     .push(Text::new("Input Device:"))
                     .push(
                         PickList::new(
@@ -257,21 +343,23 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                         )
                         .placeholder("Default Input Device")
                         .style(style::PickList)
+                        .padding(8)
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
-                        .width(Length::Units(260))
+                        .width(Length::Units(262))
                     )
+                    .push(Space::with_height(Length::Units(17)))
                     .push(
                         Column::with_children(left_file_selection_col_elems).spacing(7)
                     )
+                    .push(Space::with_height(Length::Units(17)))
                     .push(Text::new("Input Volume:"))
-                    .push(
-                        Container::new(
-                            Slider::new(&mut view_state.slider_1_state, 0.0..=100.0, view_state.slider_1_value, Message::Slider1Changed).style(style::Slider).height(44)
-                        ).width(Length::Units(260))
+                    .push(Slider::new(&mut view_state.slider_1_state, 0.0..=100.0, view_state.slider_1_value, Message::Slider1Changed)
+                        .style(style::Slider)
+                        .width(Length::Units(262))
                     ) 
             ).push(
                 Column::new().spacing(7)
-                    .push(Column::with_children(right_model_selection_col_elems).spacing(7))
+                    //.push(Column::with_children(right_model_selection_col_elems).spacing(7))
                     .push(Text::new("Output Device:"))
                     .push(
                         PickList::new(
@@ -282,17 +370,18 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                         )
                         .placeholder("Default Output Device")
                         .style(style::PickList)
+                        .padding(8)
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
-                        .width(Length::Units(260))
+                        .width(Length::Units(262))
                     )
+                    .push(Space::with_height(Length::Units(17)))
                     .push(
                         Column::with_children(right_file_selection_col_elems).spacing(7)
                     )
+                    .push(Space::with_height(Length::Units(17)))
                     .push(Text::new("Output Volume:"))
-                    .push(
-                        Container::new(
-                            Slider::new(&mut view_state.slider_2_state, 0.0..=100.0, view_state.slider_2_value, Message::Slider2Changed).style(style::Slider).height(44)
-                        ).width(Length::Units(260))
+                    .push(Slider::new(&mut view_state.slider_2_state, 0.0..=100.0, view_state.slider_2_value, Message::Slider2Changed)
+                        .style(style::Slider).width(Length::Units(262))
                     )
             )
         )
@@ -342,7 +431,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         .push(Space::with_height(Length::Units(20)))
         .push(Container::new(
                 Text::new("FakeYou Recast v1.0").size(12).color(Color::from_rgba8(255, 255, 255, 0.30))
-                .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                .font(iced::Font::External { name: "Fira Sans SemiBold", bytes: &style::BOLD_FONT})
         ).width(Length::Fill).center_x())
     ).style(style::MainButtonContainer).width(Length::Fill).height(Length::Units(130)).align_y(Vertical::Bottom).padding(28);
 

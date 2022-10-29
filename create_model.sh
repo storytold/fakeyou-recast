@@ -6,7 +6,7 @@ declare -r name_path="morgan-freeman"
 declare -r name_full="Morgan Freeman"
 
 cargo run \
-  --bin  model-packager \
+  --bin  model-packager --release \
   -- \
   --crypto-secret "${CRYPTO_SECRET}" \
   --acoustic-file "./models/${name_path}.recast" \

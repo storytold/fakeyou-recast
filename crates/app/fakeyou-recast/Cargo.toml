@@ -27,6 +27,8 @@ ringbuf = "0.2.8"
 rubato = "0.12.0"
 tch = "0.8.0"
 thiserror = "1.0"
+async-fs = "1.6.0"
+futures = "0.3.23"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
