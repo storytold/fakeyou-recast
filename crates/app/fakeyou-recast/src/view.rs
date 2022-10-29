@@ -255,6 +255,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                             view_state.input_device_list_selected.clone(),
                             Message::InputDeviceChanged,
                         )
+                        .placeholder("Default Input Device")
                         .style(style::PickList)
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
                         .width(Length::Units(260))
@@ -279,6 +280,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                             view_state.output_device_list_selected.clone(),
                             Message::OutputDeviceChanged,
                         )
+                        .placeholder("Default Output Device")
                         .style(style::PickList)
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
                         .width(Length::Units(260))
@@ -464,6 +466,7 @@ pub mod style {
                 background: Background::Color(Color::from_rgb8(57, 57, 76)),
                 border_width: 0.0,
                 border_radius: 5.0,
+                placeholder_color: Color::WHITE,
                 ..Default::default()
            }
         }
