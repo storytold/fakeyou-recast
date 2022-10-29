@@ -806,7 +806,9 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
 
     let in_chunk_size = (0.4 * in_rate as f32 * in_n_channels as f32) as usize; // 400ms
     let out_chunk_size = (0.4 * out_rate as f32 * out_n_channels as f32) as usize; // 400ms
-
+                                                                                   
+    info!("Input configured as: {} channels at {} Hz with format {:?}", in_n_channels, in_rate, in_format);
+    info!("Output configured as: {} channels at {} Hz with format {:?}", out_n_channels, out_rate, out_format);
 
     let mut resampler1 = FftFixedInOut::<f32>::new(in_rate, MODEL_SAMPLE_RATE, (in_chunk_size as f32 / in_n_channels as f32 * MODEL_SAMPLE_RATE as f32 / in_rate as f32) as usize, 1).map_err(|e| AppError::ResamplerConstructionError(e))?;
     let mut resampler1_input_buffer = resampler1.input_buffer_allocate();
@@ -939,6 +941,7 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
                             .map(|(e, sample)| {
                                 let mut sa = 0.0;
                                 for i in 0..(samples.len() / VAD_SIZE)  {
+                                    if i == vad_confidence.len() { break; }
                                     if e < (i+1)*VAD_SIZE && e > i*VAD_SIZE &&  vad_confidence[i] > SPEAKER_THRESHOLD {
                                         sa = *sample;
                                         break;
