@@ -1018,6 +1018,9 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
             //error is encountered.
             break;
         }
+
+        // The receiver tells us whether the user pressed stop and the current volume
+        // setting
         let (realtime_recording, ivol, ovol) = realtime_receiver.recv().map_err(|e| AppError::ChannelRecvError(e))?;
         if realtime_recording {
             //FIXME unsafe
@@ -1255,6 +1258,8 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
                 break;
             }
 
+            // The receiver tells us whether the user pressed stop and the current volume
+            // setting
             let (playing_target, ovol) = play_target_receiver.recv().map_err(|e| AppError::ChannelRecvError(e))?;
             if playing_target {
                 //FIXME unsafe

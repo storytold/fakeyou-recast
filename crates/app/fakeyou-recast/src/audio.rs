@@ -199,14 +199,16 @@ pub fn play_audio_vec(output_device: DeviceType, buf: Vec<f32>, receiver: std::s
             let start_time = std::time::Instant::now();
             output_stream.play().map_err(|e| AppError::PlayStreamError("output", e))?;
             while std::time::Instant::now() < (start_time + core::time::Duration::from_secs_f32(playback_secs)) {
-            let (playing, ovol) = receiver.recv().map_err(|e| AppError::ChannelRecvError(e))?;
-                if playing {
-                    //FIXME unsafe
-                    unsafe { unsafe { crate::OUTPUT_VOLUME = ovol } };
-                } else {
-                    break;
-                }
-                std::thread::sleep(core::time::Duration::from_millis(50));
+                // The receiver tells us whether the user pressed stop and the current volume
+                // setting
+                let (playing, ovol) = receiver.recv().map_err(|e| AppError::ChannelRecvError(e))?;
+                    if playing {
+                        //FIXME unsafe
+                        unsafe { unsafe { crate::OUTPUT_VOLUME = ovol } };
+                    } else {
+                        break;
+                    }
+                    std::thread::sleep(core::time::Duration::from_millis(50));
             }
         }
         DeviceType::None => {
