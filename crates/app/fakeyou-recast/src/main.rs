@@ -211,7 +211,7 @@ pub enum Message {
     SessionValid(json::JsonValue),
     SessionFailed(ApiError),
     SpinnerNextFrame(std::time::Instant),
-    None
+    Done
 }
 
 fn handle_errors(res: Result<(), AppError>) -> Message {
@@ -219,7 +219,7 @@ fn handle_errors(res: Result<(), AppError>) -> Message {
         error!("{}", e);
         MessageDialog::new().set_type(native_dialog::MessageType::Error).set_title("FakeYou Recast Error").set_text(&format!("{}", e)).show_alert().unwrap();
     }
-    Message::None
+    Message::Done
 }
 
 fn handle_recording(res: Result<Vec<f32>, AppError>) -> Message {
@@ -230,7 +230,7 @@ fn handle_recording(res: Result<Vec<f32>, AppError>) -> Message {
         let record_vec = res.unwrap();
         return Message::RecordingFinished(record_vec);
     }
-    Message::None
+    Message::Done
 }
 
 impl Application for App {
@@ -366,7 +366,6 @@ impl Application for App {
     /// Respond to messages from the UI with appropriate actions
     fn update(&mut self, msg: Self::Message) -> Command<Self::Message> {
         let mut command: Command<Self::Message> = Command::none();
-        self.view_state.show_spinner = true;
         match msg {
             Message::ShowDebugPressed => {
                 self.view_state.show_debug = !self.view_state.show_debug;
@@ -401,6 +400,7 @@ impl Application for App {
                         }
                     }
                 } else {
+                    self.view_state.show_spinner = true;
                     let (realtime_record_sender, realtime_record_receiver) = std::sync::mpsc::channel();
                     self.realtime_record_sender = Some(realtime_record_sender);
 
@@ -485,6 +485,8 @@ impl Application for App {
                         Err(_e) => { handle_errors(Err(AppError::FileDialogError(location))); }
                     }
                     //FIXME some kind of progress bar while all this crap loads
+                    // I need to change these functions to async instead of this
+                    // random thread crap to be able to tell when they're finished
                 }
             }
             Message::HifiganBrowsePressed => { 
@@ -580,6 +582,7 @@ impl Application for App {
                         self.recording = !self.recording;
                     }
                 } else {
+                    self.view_state.show_spinner = true;
                     let (record_sender, record_receiver) = std::sync::mpsc::channel();
                     self.record_sender = Some(record_sender);
                     let input_file = self.view_state.input_browse_selected.clone();
@@ -612,8 +615,15 @@ impl Application for App {
                 } else {
                     let (play_target_sender, play_target_receiver) = std::sync::mpsc::channel();
                     self.play_target_sender = Some(play_target_sender);
-
+                    self.view_state.show_spinner = true;
                     let output_device_name = self.view_state.output_device_list_selected.clone();
+                    let output_file = self.view_state.output_browse_selected.clone();
+                    let hubert = self.hubert.clone();
+                    let acoustic = self.acoustic.clone();
+                    let hifigan = self.hifigan.clone();
+                    let vad = self.vad.clone();
+
+                        let output_device_name = self.view_state.output_device_list_selected.clone();
                     let output_file = self.view_state.output_browse_selected.clone();
                     let hubert = self.hubert.clone();
                     let acoustic = self.acoustic.clone();
@@ -647,6 +657,8 @@ impl Application for App {
                 } else {
                     let (play_source_sender, play_source_receiver) = std::sync::mpsc::channel();
                     self.play_source_sender = Some(play_source_sender);
+                    self.view_state.show_spinner = true;
+                    let output_device_name = self.view_state.output_device_list_selected.clone();
 
                     let output_device_name = self.view_state.output_device_list_selected.clone();
 
@@ -675,6 +687,7 @@ impl Application for App {
             }
 
             Message::RecordingFinished(vec) => {
+                self.view_state.show_spinner = false;
                 self.record_vec.set_contents(vec);
             }
             Message::UsernameChanged(username) => {
@@ -723,7 +736,9 @@ impl Application for App {
                }
                self.view_state.spinner_frame = self.spinner_frames[self.view_state.spinner_frame_index as usize].clone();
             }
-            Message::None => { }
+            Message::Done => {
+                self.view_state.show_spinner = false;
+            }
         }
         command
     }
