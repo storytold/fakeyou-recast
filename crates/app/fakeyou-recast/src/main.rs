@@ -616,14 +616,8 @@ impl Application for App {
                     let (play_target_sender, play_target_receiver) = std::sync::mpsc::channel();
                     self.play_target_sender = Some(play_target_sender);
                     self.view_state.show_spinner = true;
-                    let output_device_name = self.view_state.output_device_list_selected.clone();
-                    let output_file = self.view_state.output_browse_selected.clone();
-                    let hubert = self.hubert.clone();
-                    let acoustic = self.acoustic.clone();
-                    let hifigan = self.hifigan.clone();
-                    let vad = self.vad.clone();
 
-                        let output_device_name = self.view_state.output_device_list_selected.clone();
+                    let output_device_name = self.view_state.output_device_list_selected.clone();
                     let output_file = self.view_state.output_browse_selected.clone();
                     let hubert = self.hubert.clone();
                     let acoustic = self.acoustic.clone();
