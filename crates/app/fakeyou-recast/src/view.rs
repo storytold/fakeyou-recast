@@ -4,6 +4,7 @@ use iced::{Length, Text, Row, Column,  Container, Element, slider::{self, Slider
 use iced_aw::{modal::{self, Modal}, card::{self, Card}};
 use iced_native::alignment::{Horizontal, Vertical};
 use iced_native::{widget::image::Image, image::Handle};
+use rust_i18n::t;
 
 #[derive(Default)]
 pub struct ViewState {
@@ -62,7 +63,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
 
     // NB: New model selection
     let mut fakeyou_model_selection_col_elems: Vec<Element<Message>> = vec![];
-    let selected_fakeyou_model_str = if view_state.fakeyou_model_browse_selected.is_none() { "no file selected" } else {view_state.fakeyou_model_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
+    let selected_fakeyou_model_str = if view_state.fakeyou_model_browse_selected.is_none() { t!("main_ui.label.no_file") } else {view_state.fakeyou_model_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default().to_string()};
 
     fakeyou_model_selection_col_elems
         .push(Row::new().spacing(5).push(Text::new("Select FakeYou Model File:"))
@@ -76,7 +77,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         .push(
             Row::new().spacing(5)
                 .push(
-                    Button::new(&mut view_state.fakeyou_model_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::FakeYouModelBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35))
+                    Button::new(&mut view_state.fakeyou_model_browse_state, Text::new(t!("main_ui.button.browse")).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::FakeYouModelBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35))
                 )
             .into()
         );
@@ -86,8 +87,8 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
     // NB: Old model selection
     let mut left_model_selection_col_elems: Vec<Element<Message>> = vec![];
     let mut right_model_selection_col_elems: Vec<Element<Message>> = vec![];
-    let selected_model_str = if view_state.model_browse_selected.is_none() { "no file selected" } else {view_state.model_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
-    let selected_hifigan_str = if view_state.hifigan_browse_selected.is_none() { "no file selected" } else {view_state.hifigan_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default() };
+    let selected_model_str = if view_state.model_browse_selected.is_none() { t!("main_ui.label.no_file") } else {view_state.model_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default().to_string()};
+    let selected_hifigan_str = if view_state.hifigan_browse_selected.is_none() { t!("main_ui.label.no_file") } else {view_state.hifigan_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default().to_string()};
     left_model_selection_col_elems
         .push(
             Row::new().spacing(5)
@@ -102,7 +103,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 ).into()
         );
     left_model_selection_col_elems.push(
-        Button::new(&mut view_state.model_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::ModelBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
+        Button::new(&mut view_state.model_browse_state, Text::new(t!("main_ui.button.browse")).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::ModelBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
     );
     right_model_selection_col_elems.push(
             Row::new().spacing(5)
@@ -114,20 +115,20 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                 ).into()
     );
     right_model_selection_col_elems.push(
-        Button::new(&mut view_state.hifigan_browse_state, Text::new("Browse").horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::HifiganBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
+        Button::new(&mut view_state.hifigan_browse_state, Text::new(t!("main_ui.button.browse")).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::HifiganBrowsePressed).style(style::Button::Grey).width(Length::Units(260)).height(Length::Units(35)).into()
     );
 
 
     let mut left_file_selection_col_elems: Vec<Element<Message>> = vec![];
     let mut right_file_selection_col_elems: Vec<Element<Message>> = vec![];
-    let selected_input_file_str = if view_state.input_browse_selected.is_none() { "no file selected" } else {view_state.input_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default() };
+    let selected_input_file_str = if view_state.input_browse_selected.is_none() { t!("main_ui.label.no_file")} else {view_state.input_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default().to_string()};
     // FIXME find a way to change the opacity of these controls without defining them twice
-    if view_state.input_device_list_selected == Some(String::from("From file"))
+    if view_state.input_device_list_selected == Some(t!("main_ui.list_item.from_file"))
     {
         left_file_selection_col_elems.push(
             Row::new().spacing(5)
                 .push(
-                    Text::new("Input File:").color(Color::from_rgba8(255, 255, 255, 1.0))
+                    Text::new(t!("main_ui.label.input_file")).color(Color::from_rgba8(255, 255, 255, 1.0))
                 )
                 .push(
                     Text::new(selected_input_file_str)
@@ -142,7 +143,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         left_file_selection_col_elems.push(
             Button::new(
                 &mut view_state.input_browse_state,
-                Text::new("Browse")
+                Text::new(t!("main_ui.button.browse"))
                     .color(Color::from_rgba8(255, 255, 255, 1.0))
                     .horizontal_alignment(Horizontal::Center)
                     .vertical_alignment(Vertical::Center)
@@ -159,7 +160,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         left_file_selection_col_elems.push(
             Row::new().spacing(5)
                 .push(
-                    Text::new("Input File:").color(Color::from_rgba8(255, 255, 255, 0.30))
+                    Text::new(t!("main_ui.label.input_file")).color(Color::from_rgba8(255, 255, 255, 0.30))
                 )
                 .push(
                     Text::new(selected_input_file_str)
@@ -174,7 +175,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         left_file_selection_col_elems.push(
             Button::new(
                 &mut view_state.input_browse_state,
-                Text::new("Browse")
+                Text::new(t!("main_ui.button.browse"))
                     .color(Color::from_rgba8(255, 255, 255, 0.30))
                     .horizontal_alignment(Horizontal::Center)
                     .vertical_alignment(Vertical::Center)
@@ -186,14 +187,14 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         );
     }
 
-        let selected_output_file_str = if view_state.output_browse_selected.is_none() { "no file selected" } else {view_state.output_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default() };
+        let selected_output_file_str = if view_state.output_browse_selected.is_none() { t!("main_ui.label.no_file")} else {view_state.output_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_name().unwrap_or_default().to_str().unwrap_or_default().to_string()};
 
-    if view_state.output_device_list_selected == Some(String::from("To file"))
+    if view_state.output_device_list_selected == Some(t!("main_ui.list_item.to_file"))
     {
         right_file_selection_col_elems.push(
             Row::new().spacing(5)
                 .push(
-                    Text::new("Output File:").color(Color::from_rgba8(255, 255, 255, 1.0))
+                    Text::new(t!("main_ui.label.output_file")).color(Color::from_rgba8(255, 255, 255, 1.0))
                 )
                 .push(
                     Text::new(selected_output_file_str)
@@ -208,7 +209,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         );
         right_file_selection_col_elems.push(
             Button::new(&mut view_state.output_browse_state,
-                Text::new("Browse")
+                Text::new(t!("main_ui.button.browse"))
                     .horizontal_alignment(Horizontal::Center)
                     .vertical_alignment(Vertical::Center))
                     .on_press(Message::OutputBrowsePressed)
@@ -220,7 +221,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         right_file_selection_col_elems.push(
             Row::new().spacing(5)
                 .push(
-                    Text::new("Output File:").color(Color::from_rgba8(255, 255, 255, 0.30))
+                    Text::new(t!("main_ui.label.output_file")).color(Color::from_rgba8(255, 255, 255, 0.30))
                 )
                 .push(
                     Text::new(selected_output_file_str)
@@ -234,7 +235,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         );
         right_file_selection_col_elems.push(
             Button::new(&mut view_state.output_browse_state,
-                Text::new("Browse")
+                Text::new(t!("main_ui.button.browse"))
                     .color(Color::from_rgba8(255, 255, 255, 0.30))
                     .horizontal_alignment(Horizontal::Center)
                     .vertical_alignment(Vertical::Center))
@@ -258,7 +259,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
             Row::new().spacing(33).push( 
                 Column::new().spacing(7)
                     .push(Column::with_children(left_model_selection_col_elems).spacing(7))
-                    .push(Text::new("Input Device:"))
+                    .push(Text::new(t!("main_ui.label.input_dev")))
                     .push(
                         PickList::new(
                             &mut view_state.input_device_list_state,
@@ -266,7 +267,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                             view_state.input_device_list_selected.clone(),
                             Message::InputDeviceChanged,
                         )
-                        .placeholder("Default Input Device")
+                        .placeholder(t!("main_ui.list_item.input_default"))
                         .style(style::PickList)
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
                         .width(Length::Units(260))
@@ -274,7 +275,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     .push(
                         Column::with_children(left_file_selection_col_elems).spacing(7)
                     )
-                    .push(Text::new("Input Volume:"))
+                    .push(Text::new(t!("main_ui.label.input_vol")))
                     .push(
                         Container::new(
                             Slider::new(&mut view_state.slider_1_state, 0.0..=100.0, view_state.slider_1_value, Message::Slider1Changed).style(style::Slider).height(44)
@@ -283,7 +284,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
             ).push(
                 Column::new().spacing(7)
                     .push(Column::with_children(right_model_selection_col_elems).spacing(7))
-                    .push(Text::new("Output Device:"))
+                    .push(Text::new(t!("main_ui.label.output_dev")))
                     .push(
                         PickList::new(
                             &mut view_state.output_device_list_state,
@@ -291,7 +292,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                             view_state.output_device_list_selected.clone(),
                             Message::OutputDeviceChanged,
                         )
-                        .placeholder("Default Output Device")
+                        .placeholder(t!("main_ui.list_item.output_default"))
                         .style(style::PickList)
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
                         .width(Length::Units(260))
@@ -299,7 +300,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     .push(
                         Column::with_children(right_file_selection_col_elems).spacing(7)
                     )
-                    .push(Text::new("Output Volume:"))
+                    .push(Text::new(t!("main_ui.label.output_vol")))
                     .push(
                         Container::new(
                             Slider::new(&mut view_state.slider_2_state, 0.0..=100.0, view_state.slider_2_value, Message::Slider2Changed).style(style::Slider).height(44)
@@ -320,28 +321,28 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
             Row::new().spacing(10)
             .push(
                 Button::new(&mut view_state.record_state, 
-                    Text::new( if view_state.input_device_list_selected == Some(String::from("From file")) { "Read File" } else if recording { "Stop" } else { "Record"} ).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
+                    Text::new( if view_state.input_device_list_selected == Some(t!("main_ui.list_item.from_file")) { t!("main_ui.button.read_file") } else if recording { t!("main_ui.button.stop") } else { t!("main_ui.button.record")} ).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
                     .on_press(Message::RecordPressed)
                     .style(style::Button::Red)
                     .width(Length::Units(130))
                     .height(Length::Units(35))
             )
             .push(
-                Button::new(&mut view_state.play_source_state, Text::new(if playing_source { "Stop" } else { "Play Source" }).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::PlaySourcePressed)
+                Button::new(&mut view_state.play_source_state, Text::new(if playing_source { t!("main_ui.button.stop") } else { t!("main_ui.button.play_source")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::PlaySourcePressed)
                 .style(style::Button::Red)
                 .width(Length::Units(130))
                 .height(Length::Units(35))
             )
             .push(
                 Button::new(&mut view_state.play_target_state, 
-                    Text::new(if view_state.output_device_list_selected == Some(String::from("To file")) {"Write File"} else if playing_target { "Stop" } else { "Play Target"}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
+                    Text::new(if view_state.output_device_list_selected == Some(t!("main_ui.list-item.to_file")) {t!("main_ui.button.write_file")} else if playing_target { t!("main_ui.button.stop") } else { t!("main_ui.button.play_target")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
                     .on_press(Message::PlayTargetPressed)
                     .style(style::Button::Red)
                     .width(Length::Units(130))
                     .height(Length::Units(35))
             )
             .push(
-                Button::new(&mut view_state.realtime_record_state, Text::new(if realtime_recording { "Stop" } else { "Realtime"}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::RealtimeRecordPressed)
+                Button::new(&mut view_state.realtime_record_state, Text::new(if realtime_recording { t!("main_ui.button.stop") } else { t!("main_ui.button.realtime")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::RealtimeRecordPressed)
                 .style(style::Button::Red)
                 .width(Length::Units(130))
                 .height(Length::Units(35))
@@ -349,7 +350,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         )
         .push(Space::with_height(Length::Units(20)))
         .push(Container::new(
-                Text::new("FakeYou Recast v1.0").size(12).color(Color::from_rgba8(255, 255, 255, 0.30))
+                Text::new(t!("app_name") + " v1.0").size(12).color(Color::from_rgba8(255, 255, 255, 0.30))
                 .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
         ).width(Length::Fill).center_x())
     ).style(style::MainButtonContainer).width(Length::Fill).height(Length::Units(130)).align_y(Vertical::Bottom).padding(28);
@@ -359,11 +360,11 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
     // Login Modal
     Modal::new(&mut view_state.login_modal_state, main_ui, |state| 
        Card::new(
-           Text::new("Login"),
+           Text::new(t!("login_modal.label.login")),
            Column::new().spacing(10)
            .push(
                 Row::new().spacing(5)
-                .push(Text::new("Username:"))
+                .push(Text::new(t!("login_modal.label.username")))
                 .push(
                     Container::new(
                         TextInput::new(&mut state.username_field_state, "", &mut state.username_field_value, username_text_handler).on_submit(Message::LoginPressed)
@@ -373,7 +374,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
            .push(
                 Row::new().spacing(8) // bad hack to make the input fields line up despite
                                       // differing widths of text 'username' and 'password'
-                .push(Text::new("Password:"))
+                .push(Text::new(t!("login_modal.label.password")))
                 .push(
                     Container::new(
                         TextInput::new(&mut state.password_field_state, "", &mut state.password_field_value, password_text_handler).password().on_submit(Message::LoginPressed)
@@ -383,7 +384,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
            .push(Text::new(if state.login_failed { &state.login_err_msg } else { "" }).color(iced::Color::from_rgb(1.0, 0.0, 0.0)).size(15))
         ).foot(
             Container::new(
-            Button::new(&mut state.login_button_state, Text::new("Login")).on_press(Message::LoginPressed)
+            Button::new(&mut state.login_button_state, Text::new(t!("login_modal.label.login"))).on_press(Message::LoginPressed)
             ).width(iced::Length::Fill).center_x()
         )
        .max_width(250)

@@ -12,6 +12,12 @@ use rubato::{FftFixedInOut, Resampler};
 use std::{path::PathBuf, env, io::Write, sync::{atomic::{AtomicBool, Ordering},  mpsc::{self, TryRecvError}}};
 use thiserror::Error;
 
+use rust_i18n::t;
+use rust_i18n::i18n;
+
+i18n!("../../../assets/locales");
+
+
 mod api;
 mod audio;
 mod consts;
@@ -353,7 +359,7 @@ impl Application for App {
 
     /// Controls the title bar of the application window
     fn title(&self) -> String {
-        String::from("FakeYou Recast")
+        t!("app_name")
     }
 
     fn background_color(&self) -> Color {

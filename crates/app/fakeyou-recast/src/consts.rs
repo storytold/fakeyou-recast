@@ -5,5 +5,3 @@ pub const VAD_SIZE: usize = 600;
 pub const WINDOW_WIDTH: u32 = 609;
 pub const WINDOW_HEIGHT: u32 = 636;
 pub const SPEAKER_THRESHOLD: f32 = 0.4;
-
-//TODO string table for i18n

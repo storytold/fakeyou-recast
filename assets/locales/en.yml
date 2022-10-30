@@ -1,0 +1,37 @@
+en:
+  app_name: "FakeYou Recast"
+  main_ui:
+    button:
+      browse: "Browse"
+      record: "Record"
+      read_file: "Read File"
+      stop: "Stop"
+      play_source: "Play Source"
+      play_target: "Play Target"
+      write_file: "Write File"
+      realtime: "Realtime"
+    label:
+      input_dev: "Input Device:"
+      input_file: "Input File:"
+      input_vol: "Input Volume:"
+      output_dev: "Output Device:"
+      output_file: "Output File:"
+      output_vol: "Output Volume:"
+      no_file: "no file selected"
+    list_item:
+      to_file: "To file"
+      from_file: "From file"
+      input_default: "Default Input Device"
+      output_default: "Default Output Device"
+  login_modal:
+    label:
+      login: "Login"
+      username: "Username:"
+      password: "Password:"
+  log:
+    error:
+    info:
+    debug:
+
+
+
