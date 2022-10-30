@@ -3,7 +3,7 @@
 
 use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{BufferSize, SampleFormat};
-use iced::{executor, Application, Element, Command, Settings, window::{self, Icon}, Subscription, keyboard::{self, KeyCode}, Color};
+use iced::{executor, Application, Element, Command, Settings, window::{self, Icon}, Subscription, keyboard::{self, KeyCode}, Color, time};
 use iced_native::{event, subscription, Event};
 use log::{info, debug,  warn, error};
 use model_serde::serde::deserializer::ModelDeserializer;
@@ -20,6 +20,7 @@ mod discord;
 mod softvc;
 mod vad;
 mod view;
+mod spinner;
 
 use audio::DeviceType;
 use consts::*;
@@ -155,6 +156,7 @@ struct App {
     cpu_mode: bool,
     offline_mode: bool,
     record_vec: RecordVector,
+    spinner_frames: Vec<Vec<u8>>
 }
 
 #[derive(Debug, Clone)]
@@ -208,6 +210,7 @@ pub enum Message {
     LoginFailed(ApiError),
     SessionValid(json::JsonValue),
     SessionFailed(ApiError),
+    SpinnerNextFrame(std::time::Instant),
     None
 }
 
@@ -255,6 +258,39 @@ impl Application for App {
         output_device_list_options.insert(0, String::from("To file"));
         let mut cpu_mode = false;
         let offline_mode = false;
+
+        let spinner_frames = vec![
+            spinner::FRAME1.to_vec(),
+            spinner::FRAME2.to_vec(),
+            spinner::FRAME3.to_vec(),
+            spinner::FRAME4.to_vec(),
+            spinner::FRAME5.to_vec(),
+            spinner::FRAME6.to_vec(),
+            spinner::FRAME7.to_vec(),
+            spinner::FRAME8.to_vec(),
+            spinner::FRAME9.to_vec(),
+            spinner::FRAME10.to_vec(),
+            spinner::FRAME11.to_vec(),
+            spinner::FRAME12.to_vec(),
+            spinner::FRAME13.to_vec(),
+            spinner::FRAME14.to_vec(),
+            spinner::FRAME15.to_vec(),
+            spinner::FRAME16.to_vec(),
+            spinner::FRAME17.to_vec(),
+            spinner::FRAME18.to_vec(),
+            spinner::FRAME19.to_vec(),
+            spinner::FRAME20.to_vec(),
+            spinner::FRAME21.to_vec(),
+            spinner::FRAME22.to_vec(),
+            spinner::FRAME23.to_vec(),
+            spinner::FRAME24.to_vec(),
+            spinner::FRAME25.to_vec(),
+            spinner::FRAME26.to_vec(),
+            spinner::FRAME27.to_vec(),
+            spinner::FRAME28.to_vec(),
+            spinner::FRAME29.to_vec(),
+            spinner::FRAME30.to_vec(),
+        ];
 
 
         let mut session_token = None;
@@ -309,6 +345,7 @@ impl Application for App {
                 record_vec,
                 cpu_mode,
                 offline_mode,
+                spinner_frames,
             },
             command
         )
@@ -329,6 +366,7 @@ impl Application for App {
     /// Respond to messages from the UI with appropriate actions
     fn update(&mut self, msg: Self::Message) -> Command<Self::Message> {
         let mut command: Command<Self::Message> = Command::none();
+        self.view_state.show_spinner = true;
         match msg {
             Message::ShowDebugPressed => {
                 self.view_state.show_debug = !self.view_state.show_debug;
@@ -678,29 +716,25 @@ impl Application for App {
                     self.offline_mode = true;
                 }
             }
+            Message::SpinnerNextFrame(_) => {
+               self.view_state.spinner_frame_index += 1; 
+               if self.view_state.spinner_frame_index == 30 {
+                   self.view_state.spinner_frame_index = 0;
+               }
+               self.view_state.spinner_frame = self.spinner_frames[self.view_state.spinner_frame_index as usize].clone();
+            }
             Message::None => { }
         }
         command
     }
 
-    /// F12 hotkey for secret options
     fn subscription(&self) -> Subscription<Message> {
-        subscription::events_with(|event, status| {
-            if let event::Status::Captured = status {
-                return None;
-            }
-
-            match event {
-                Event::Keyboard(keyboard::Event::KeyPressed {
-                    modifiers: _,
-                    key_code,
-                }) => match key_code {
-                    KeyCode::F12 => Some(Message::ShowDebugPressed),
-                    _ => None,
-                }
-                _ => None,
-            }
-        })
+        if self.view_state.show_spinner {
+            time::every(core::time::Duration::from_millis(33)).map(Message::SpinnerNextFrame)
+        }
+        else {
+            Subscription::none()
+        }
     }
 
 

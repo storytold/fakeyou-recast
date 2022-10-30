@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use iced::{Length, Text, Row, Column,  Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}, Space, Color, Rectangle};
 use iced_aw::{modal::{self, Modal}, card::{self, Card}};
 use iced_native::alignment::{Horizontal, Vertical};
+use iced_native::{widget::image::Image, image::Handle};
 
 #[derive(Default)]
 pub struct ViewState {
@@ -31,6 +32,9 @@ pub struct ViewState {
     pub output_browse_selected: Option<PathBuf>,
     pub slider_1_value: f32,
     pub slider_2_value: f32,
+    pub show_spinner: bool,
+    pub spinner_frame: Vec<u8>,
+    pub spinner_frame_index: u8,
     pub show_debug: bool,
 }
 
@@ -240,6 +244,13 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         );
     }
 
+    let spinner_image_handle = Handle::from_memory(view_state.spinner_frame.clone());
+    let spinner = if view_state.show_spinner {
+        Container::new(Image::<Handle>::new(spinner_image_handle).height(Length::Units(50))).height(Length::Fill).align_y(Vertical::Bottom).width(Length::Fill).center_x()
+    } else {
+        Container::new(Space::with_height(Length::Units(0))) // FIXME janky empty widget
+    };
+
     let main_container = Container::new(
         Column::new().spacing(7)
         .push(fakeyou_model_selection_row)
@@ -297,6 +308,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
             )
         )
         .push(Space::with_height(Length::Units(42)))
+        .push(spinner)
     ).style(style::MainContainer).width(Length::Fill).height(Length::Fill).padding(28);
 
 

@@ -34,7 +34,6 @@ pub async fn login(username: String, password: String) -> Result<String, ApiErro
             match response.status() {
                 reqwest::StatusCode::OK => {
                     let cookie = response.cookies().next();
-                    println!("{:?}", cookie);
                     match cookie {
                         Some(cookie) => {
                             Ok(cookie.value().to_string())
