@@ -724,10 +724,7 @@ impl Application for App {
                 }
             }
             Message::SpinnerNextFrame(_) => {
-               self.view_state.spinner_frame_index += 1; 
-               if self.view_state.spinner_frame_index == 30 {
-                   self.view_state.spinner_frame_index = 0;
-               }
+               self.view_state.spinner_frame_index = (self.view_state.spinner_frame_index + 1) % 30;
                self.view_state.spinner_frame = self.spinner_frames[self.view_state.spinner_frame_index as usize].clone();
             }
             Message::Done => {
