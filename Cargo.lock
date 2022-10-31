@@ -1080,7 +1080,6 @@ dependencies = [
  "rubato",
  "rust-i18n",
  "tch",
- "thiserror",
  "winres",
 ]
 

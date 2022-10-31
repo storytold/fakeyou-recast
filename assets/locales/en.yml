@@ -23,15 +23,58 @@ en:
       from_file: "From file"
       input_default: "Default Input Device"
       output_default: "Default Output Device"
+    status:
   login_modal:
     label:
       login: "Login"
       username: "Username:"
       password: "Password:"
+  file_dialog:
+    wav: "WAV audio file"
   log:
     error:
+      startup_dir: "startup directory could not be found: %{error}"
+      write_sess_token: "Failed to write the session token to file: %{error}"
+      invalid_session: "Error validating session: %{error}"
+      realtime_file: "Cannot use files for realtime."
+      in_resampler: "Input resampler error: %{error}"
+      out_resampler: "Output resampler error: %{error}"
+      output_stream: "Output stream error: %{error}"
+      no_device: "The %{io} device could not be determined"
+      no_file: "No %{io} file selected"
+      no_cuda: "No CUDA-capable GPU detected. For best results, use an Nvidia GPU. Switching to CPU mode."
+      build_input_stream: "The input stream could not be constructed. Verify the device is working and supports Float32 or PCM S16 samples with a buffer size of %{bufsz}"
+      build_output_stream: "The output stream could not be constructed. Verify the device is working and supports Float32 or PCM S16 samples with a buffer size of %{bufsz}"
+      play_stream: "The %{io} stream could not be played"
+      channel_recv: "Attempted a receive from a disconnected channel."
+      channel_send: "Attempted a send to a disconnected channel."
+      io: "IO Error:\n%{error}" 
+      generic_format: "Audio format must be PCM S16 or Float32"
+      hound: "WAV read/write error:\n%{error}"
+      lock: "Attempted to lock a mutex that is already locked"
+      model_load: "Failed to load the model"
+      no_model: "No model is loaded"
+      model_error: "Inference failed to produce an output"
+      filedlg: "File picker dialog failed to open for path:\n%{path}"
+      resampler_construction: "Resampler construction failed:\n%{error}"
+      resample: "Resampling failed:\n%{error}"
     info:
+      in_sel_file: "Selected file %{file} for input"
+      out_sel_file: "Selected file %{file} for output"
+      in_sel_dev: "Selected %{dev} for input"
+      out_sel_dev: "Selected %{dev} for output"
+      start_realtime: "Started realtime recording from %{in} with playback on %{out}"
+      in_config: "Input configured as %{ch} channels at %{freq} Hz with format %{format}"
+      out_config: "Output configured as %{ch} channels at %{freq} Hz with format %{format}"
+      stopped_realtime: "Stopped realtime recording"
+      started_recording: "Recording started from %{dev}"
+      playing_source: "Playing source audio on %{dev}"
+      playing_target: "Running inference and playing target audio on %{dev}"
+      stopped_play_target: "Finished playing target audio"
+      opening_model: "Opening model: %{file}"
     debug:
-
-
-
+  misc:
+    input: "input"
+    output: "output"
+    error: "Error"
+    default: "Default"
