@@ -1,24 +1,6 @@
-use thiserror::Error;
 use std::collections::HashMap;
 use crate::Message;
-
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum ApiError {
-    #[error("Incorrect username or password entered.")]
-    InvalidLoginCredentials,
-    #[error("Invalid/expired session token.")]
-    InvalidSession,
-    #[error("Server failed to process request.")]
-    ServerError,
-    #[error("Unexpected error:\n{0})")]
-    UnknownError(String),
-    #[error("Could not send request. Ensure your computer is connected to the internet.")]
-    ReqwestError/*(#[source] reqwest::Error)*/,
-    #[error("Server could not process request due to too much traffic.")]
-    ServerOverloaded,
-    #[error("The server returned data we aren't able to parse.")]
-    Parse,
-}
+pub use crate::error::ApiError;
 
 pub async fn login(username: String, password: String) -> Result<String, ApiError> {
     let client = reqwest::Client::new();

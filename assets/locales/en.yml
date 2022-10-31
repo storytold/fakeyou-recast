@@ -58,6 +58,14 @@ en:
       filedlg: "File picker dialog failed to open for path:\n%{path}"
       resampler_construction: "Resampler construction failed:\n%{error}"
       resample: "Resampling failed:\n%{error}"
+      api:
+        invalid_login_creds: "Incorrect username or password entered."
+        invalid_session: "Invalid or expired session token."
+        server: "The server failed to process your request."
+        unknown: "Unexpected error:\n%{error}"
+        reqwest: "Could not send request. Ensure your computer is connected to the internet."
+        overloaded: "The server could not process your request due to too much traffic."
+        parse: "The server returned data the app is not able to parse."
     info:
       in_sel_file: "Selected file %{file} for input"
       out_sel_file: "Selected file %{file} for output"
@@ -68,6 +76,7 @@ en:
       out_config: "Output configured as %{ch} channels at %{freq} Hz with format %{format}"
       stopped_realtime: "Stopped realtime recording"
       started_recording: "Recording started from %{dev}"
+      stopped_recording: "Recording stopped"
       playing_source: "Playing source audio on %{dev}"
       playing_target: "Running inference and playing target audio on %{dev}"
       stopped_play_target: "Finished playing target audio"

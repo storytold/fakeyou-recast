@@ -4,6 +4,7 @@ use crate::AppError;
 use log::{info, error};
 use rubato::{FftFixedInOut, Resampler};
 use crate::consts::*;
+use rust_i18n::t;
 
 pub fn get_input_device_list() -> Vec<String> {
     let input_devices = cpal::default_host().input_devices();
@@ -43,7 +44,7 @@ pub fn get_input_device(input_device_name: Option<String>, input_file_path: Opti
     let input_device;
     if let Some(input_device_name) = input_device_name {
         if input_device_name == "From file" {
-            let file = File::open(input_file_path.clone().ok_or(AppError::NoFile("input"))?).map_err(|e| AppError::IoError(e))?;
+            let file = File::open(input_file_path.clone().ok_or(AppError::NoFile(t!("misc.input")))?).map_err(|e| AppError::IoError(e))?;
             input_device = DeviceType::File((file, input_file_path.unwrap_or_default()));
         }
         else {
@@ -51,15 +52,15 @@ pub fn get_input_device(input_device_name: Option<String>, input_file_path: Opti
             //FIXME better unique identifier than the name of the device?
             //or maybe it's guaranteed unique already idk
             let input_device_foo = host.input_devices()
-                .map_err(|_e| AppError::NoDevice("input"))?
+                .map_err(|_e| AppError::NoDevice(t!("misc.input")))?
                 .filter(|d| d.name().unwrap_or(String::from("")) == input_device_name)
-                .next().ok_or(AppError::NoDevice("input"))?;
+                .next().ok_or(AppError::NoDevice(t!("misc.input")))?;
 
             input_device = DeviceType::Device(input_device_foo);
         }
     }
     else {
-        input_device = DeviceType::Device(cpal::default_host().default_input_device().ok_or(AppError::NoDevice("input"))?);
+        input_device = DeviceType::Device(cpal::default_host().default_input_device().ok_or(AppError::NoDevice(t!("misc.input")))?);
     }
     Ok(input_device)
 }
@@ -68,7 +69,7 @@ pub fn get_output_device(output_device_name: Option<String>, output_file_path: O
     let output_device;
     if let Some(output_device_name) = output_device_name {
         if output_device_name == "To file" {
-            let file = File::create(output_file_path.clone().ok_or(AppError::NoFile("output"))?).map_err(|e| AppError::IoError(e))?;
+            let file = File::create(output_file_path.clone().ok_or(AppError::NoFile(t!("misc.output")))?).map_err(|e| AppError::IoError(e))?;
             output_device = DeviceType::File((file, output_file_path.unwrap_or_default()));
         }
         else {
@@ -76,14 +77,14 @@ pub fn get_output_device(output_device_name: Option<String>, output_file_path: O
             //FIXME better unique identifier than the name of the device?
             //or maybe it's guaranteed unique already idk
             let output_device_foo = host.output_devices()
-                .map_err(|_e| AppError::NoDevice("output"))?
+                .map_err(|_e| AppError::NoDevice(t!("misc.output")))?
                 .filter(|d| d.name().unwrap_or(String::from("")) == output_device_name)
-                .next().ok_or(AppError::NoDevice("output"))?;
+                .next().ok_or(AppError::NoDevice(t!("misc.output")))?;
             output_device = DeviceType::Device(output_device_foo)
         }
     }
     else {
-        output_device = DeviceType::Device(cpal::default_host().default_output_device().ok_or(AppError::NoDevice("output"))?);
+        output_device = DeviceType::Device(cpal::default_host().default_output_device().ok_or(AppError::NoDevice(t!("misc.output")))?);
     }
     Ok(output_device)
 }
@@ -135,7 +136,7 @@ pub fn play_audio_vec(output_device: DeviceType, buf: Vec<f32>, receiver: std::s
             while chunk.len() > 0 {
                 resampler_input_buffer.clear();
                 resampler_input_buffer.push(chunk);
-                resampler.process_into_buffer(&resampler_input_buffer, &mut resampler_output_buffer, None)?;
+                resampler.process_into_buffer(&resampler_input_buffer, &mut resampler_output_buffer, None).map_err(|e| AppError::ResampleError(e))?;
                 output_vec.extend_from_slice(&resampler_output_buffer[0]);
                 let desired_size = resampler.input_frames_next();
                 chunk = play_vec_iter.by_ref().map(|r| *r).take(desired_size).collect();
@@ -197,7 +198,7 @@ pub fn play_audio_vec(output_device: DeviceType, buf: Vec<f32>, receiver: std::s
             
 
             let start_time = std::time::Instant::now();
-            output_stream.play().map_err(|e| AppError::PlayStreamError("output", e))?;
+            output_stream.play().map_err(|e| AppError::PlayStreamError(e, t!("misc.output")))?;
             while std::time::Instant::now() < (start_time + core::time::Duration::from_secs_f32(playback_secs)) {
                 // The receiver tells us whether the user pressed stop and the current volume
                 // setting
@@ -217,7 +218,7 @@ pub fn play_audio_vec(output_device: DeviceType, buf: Vec<f32>, receiver: std::s
             }
         }
         DeviceType::None => {
-            Err(AppError::NoDevice("output"))?
+            Err(AppError::NoDevice(t!("misc.output")))?
         }
     }
     info!("Finished playing");
@@ -271,7 +272,7 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
                     chunk.resize(desired_size, 0.0);
                 }
                 resampler_input_buffer.push(chunk);
-                resampler.process_into_buffer(&resampler_input_buffer, &mut resampler_output_buffer, None)?;
+                resampler.process_into_buffer(&resampler_input_buffer, &mut resampler_output_buffer, None).map_err(|e| AppError::ResampleError(e))?;
                 
                 // mix stereo (or more channels) to mono
                 for channel in resampler_output_buffer[0].chunks(reader.spec().channels as usize) {
@@ -352,7 +353,7 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
 
             }?;
 
-            input_stream.play().map_err(|e| AppError::PlayStreamError("input", e))?;
+            input_stream.play().map_err(|e| AppError::PlayStreamError(e, t!("misc.input")))?;
 
             loop {
                 match receiver.try_recv() {
@@ -363,7 +364,7 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
                             atomic_vol2.store(ivol.to_bits(), std::sync::atomic::Ordering::Relaxed);
                             std::thread::sleep(std::time::Duration::from_millis(50));
                         } else {
-                            info!("Recording stopped");
+                            info!("{}", t!("log.info.stopped_recording"));
                             break;
                         }
                     }
@@ -388,7 +389,7 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
                     chunk.resize(desired_size, 0.0);
                 }
                 resampler_input_buffer.push(chunk);
-                resampler.process_into_buffer(&resampler_input_buffer, &mut resampler_output_buffer, None)?;
+                resampler.process_into_buffer(&resampler_input_buffer, &mut resampler_output_buffer, None).map_err(|e| AppError::ResampleError(e))?;
                 // mix stereo (or more channels) to mono
                 for channel in resampler_output_buffer[0].chunks(in_n_channels as usize) {
                     let mut mixed: f32 = 0.0;
@@ -403,7 +404,7 @@ pub fn record_audio_vec(input_device: DeviceType, receiver: std::sync::mpsc::Rec
             Ok(output_vec)
         },
         DeviceType::None => {
-            Err(AppError::NoDevice("input"))
+            Err(AppError::NoDevice(t!("misc.input")))
         }
     }
 }

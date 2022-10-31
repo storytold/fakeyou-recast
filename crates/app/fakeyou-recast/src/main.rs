@@ -185,7 +185,6 @@ fn handle_errors(res: Result<(), AppError>) -> Message {
             .set_title((t!("app_name") + t!("misc.error").as_str()).as_str())
             .set_text(&format!("{}", e)).show_alert().unwrap();
     }
-    info!("done");
     Message::Done
 }
 
@@ -835,7 +834,7 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
     let out_chunk_size = (0.4 * out_rate as f32 * out_n_channels as f32) as usize; // 400ms
                                                                                    
     info!("{}", t!("log.info.in_config", ch = in_n_channels.to_string().as_str(), freq = in_rate.to_string().as_str(), format = format!("{:?}", in_format).as_str()));
-    info!("{}", t!("log.info.out_config", ch = out_n_channels.to_string().as_str(), out_rate = out_rate.to_string().as_str(), format = format!("{:?}", out_format).as_str()));
+    info!("{}", t!("log.info.out_config", ch = out_n_channels.to_string().as_str(), freq = out_rate.to_string().as_str(), format = format!("{:?}", out_format).as_str()));
 
     let mut resampler1 = FftFixedInOut::<f32>::new(in_rate, MODEL_SAMPLE_RATE, (in_chunk_size as f32 / in_n_channels as f32 * MODEL_SAMPLE_RATE as f32 / in_rate as f32) as usize, 1).map_err(|e| AppError::ResamplerConstructionError(e))?;
     let mut resampler1_input_buffer = resampler1.input_buffer_allocate();
@@ -1033,8 +1032,8 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
     }?;
 
 
-    input_stream.play().map_err(|e| AppError::PlayStreamError(t!("misc.input"), e))?;
-    output_stream.play().map_err(|e| AppError::PlayStreamError(t!("misc.output"), e))?;
+    input_stream.play().map_err(|e| AppError::PlayStreamError(e, t!("misc.input")))?;
+    output_stream.play().map_err(|e| AppError::PlayStreamError(e, t!("misc.output")))?;
     loop {
         if cancel_token2.load(Ordering::Relaxed) {
             break;
@@ -1156,7 +1155,7 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
             let cancel_token3 = arc_cancel_token.clone();
 
             std::thread::spawn(move || {
-                'outer: for chunk in source.chunks(resampler_input_size)
+                for chunk in source.chunks(resampler_input_size)
                 {
                     let processing_start_time = std::time::Instant::now();
                     // Find active 50ms chunks with Silero VAD
@@ -1275,7 +1274,7 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
         }?;
 
 
-        output_stream.play().map_err(|e| {error!("{}", t!("log.error.output_stream", error = e.to_string().as_str())); AppError::PlayStreamError(t!("misc.output"), e)})?;
+        output_stream.play().map_err(|e| {error!("{}", t!("log.error.output_stream", error = e.to_string().as_str())); AppError::PlayStreamError(e, t!("misc.output"))})?;
         //add a couple seconds in case we fall behind
         let stop_time = std::time::Instant::now() + core::time::Duration::from_secs_f32(playback_secs + 2.0);
         loop {

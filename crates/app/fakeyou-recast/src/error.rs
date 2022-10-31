@@ -54,4 +54,28 @@ impl core::fmt::Display for AppError {
 
 impl std::error::Error for AppError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApiError {
+    InvalidLoginCredentials,
+    InvalidSession,
+    ServerError,
+    UnknownError(String),
+    ReqwestError,
+    ServerOverloaded,
+    Parse,
+}
 
+impl core::fmt::Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiError::InvalidLoginCredentials => f.write_str(t!("log.error.api.invalid_login_creds").as_str()),
+            ApiError::InvalidSession => f.write_str(t!("log.error.api.invalid_session").as_str()),
+            ApiError::ServerError => f.write_str(t!("log.error.api.server").as_str()),
+            ApiError::UnknownError(e) => f.write_str(t!("log.error.api.unknown", error = e.to_string().as_str()).as_str()),
+            ApiError::ReqwestError => f.write_str(t!("log.error.api.reqwest").as_str()),
+            ApiError::ServerOverloaded => f.write_str(t!("log.error.api.overloaded").as_str()),
+            ApiError::Parse => f.write_str(t!("log.error.api.parse").as_str()),
+        }
+    }
+}
+impl std::error::Error for ApiError {}
