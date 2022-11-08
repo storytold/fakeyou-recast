@@ -17,7 +17,7 @@ discord-rich-presence = "0.2.3"
 fern = "0.6.1"
 hound = "3.4.0"
 iced = {version = "0.4.2", features=["tokio", "image"]}
-iced_aw = { version = "0.2.0", default-features=false, features=["card", "modal"]}
+iced_aw = { version = "0.2.0", default-features=false, features=["card", "modal", "tab_bar"]}
 iced_native =  "0.5.1"
 json = "0.12.4" # untyped json crate, for processing responses which might not have fixed structure
 log = "0.4.17"

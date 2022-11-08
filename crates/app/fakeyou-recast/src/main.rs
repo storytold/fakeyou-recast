@@ -173,6 +173,7 @@ pub enum Message {
     SessionValid(json::JsonValue),
     SessionFailed(ApiError),
     SpinnerNextFrame(std::time::Instant),
+    TabChanged(usize),
     Done
 }
 
@@ -709,6 +710,9 @@ impl Application for App {
             Message::SpinnerNextFrame(_) => {
                self.view_state.spinner_frame_index = (self.view_state.spinner_frame_index + 1) % 30;
                self.view_state.spinner_frame = self.spinner_frames[self.view_state.spinner_frame_index as usize].clone();
+            }
+            Message::TabChanged(index) => {
+                self.view_state.active_tab = index;
             }
             Message::Done => {
                 // set the button text back to normal state

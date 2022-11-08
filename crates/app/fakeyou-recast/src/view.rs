@@ -1,7 +1,7 @@
 use crate::{Message, app_state::AppState};
 use std::path::PathBuf;
 use iced::{Length, Text, Row, Column,  Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}, Space, Color, Rectangle};
-use iced_aw::{modal::{self, Modal}, card::{self, Card}};
+use iced_aw::{modal::{self, Modal}, card::{self, Card}, tab_bar::{TabLabel, TabBar}};
 use iced_native::alignment::{Horizontal, Vertical};
 use iced_native::{widget::image::Image, image::Handle};
 use rust_i18n::t;
@@ -38,6 +38,7 @@ pub struct ViewState {
     pub spinner_frame_index: u8,
     pub show_debug: bool,
     pub status_message: String,
+    pub active_tab: usize,
 }
 
 #[derive(Default)]
@@ -362,7 +363,31 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
         ).width(Length::Fill).center_x())
     ).style(style::MainButtonContainer).width(Length::Fill).height(Length::Units(130)).align_y(Vertical::Bottom).padding(28);
 
-    let main_ui = Column::new().push(main_container).push(main_button_container);
+    let main_tab = Column::new().push(main_container).push(main_button_container);
+    //FIXME
+    let news_tab = Column::new().push(Container::new(Column::new()).style(style::MainContainer).width(Length::Fill).height(Length::Fill));
+    let settings_tab = Column::new().push(Container::new(Column::new()).style(style::MainContainer).width(Length::Fill).height(Length::Fill));
+
+    let  main_ui = Column::new().push(
+        TabBar::width_tab_labels(view_state.active_tab, 
+            vec![
+                TabLabel::Text(String::from("Main")),
+                TabLabel::Text(String::from("News")),
+                TabLabel::Text(String::from("Settings"))
+            ], |active_tab|
+            {
+                Message::TabChanged(active_tab)
+            }
+        )
+    ).push(
+        match view_state.active_tab {
+            0 => main_tab,
+            1 => news_tab,
+            2 => settings_tab,
+            _ => unreachable!()
+        }
+    );
+
 
     // Login Modal
     Modal::new(&mut view_state.login_modal_state, main_ui, |state| 
