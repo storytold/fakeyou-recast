@@ -16,7 +16,6 @@ use rust_i18n::i18n;
 
 i18n!("../../../assets/locales");
 
-
 mod api;
 mod audio;
 mod consts;
@@ -26,12 +25,14 @@ mod vad;
 mod view;
 mod spinner;
 mod error;
+mod app_state;
 
 use audio::DeviceType;
 use consts::*;
 use crate::discord::spawn_discord_thread;
 use softvc::Model;
 use api::ApiError;
+use app_state::AppState;
 
 pub use error::AppError;
 
@@ -113,12 +114,9 @@ struct App {
     realtime_record_sender: Option<mpsc::Sender<(bool, f32, f32)>>,
     play_target_sender: Option<mpsc::Sender<(bool, f32)>>,
     play_source_sender: Option<mpsc::Sender<(bool, f32)>>,
-    recording: bool,
-    realtime_recording: bool,
-    playing_source: bool,
-    playing_target: bool,
     cpu_mode: bool,
     offline_mode: bool,
+    state: AppState,
     record_vec: RecordVector,
     spinner_frames: Vec<Vec<u8>>
 }
@@ -212,20 +210,17 @@ impl Application for App {
         let hifigan = softvc::Hifigan::new();
         let vad = vad::Vad::new();
         let mut view_state = view::ViewState::new();
-        let recording = false;
         let record_sender = None;
         let realtime_record_sender = None;
         let play_target_sender = None;
         let play_source_sender = None;
-        let realtime_recording = false;
-        let playing_source = false;
-        let playing_target = false;
         let mut input_device_list_options = audio::get_input_device_list();
         input_device_list_options.insert(0, t!("main_ui.list_item.from_file"));
         let mut output_device_list_options: Vec<String> = audio::get_output_device_list();
         output_device_list_options.insert(0, t!("main_ui.list_item.to_file"));
         let mut cpu_mode = false;
         let offline_mode = false;
+        let state = AppState::Idle;
 
         let spinner_frames = vec![
             spinner::FRAME1.to_vec(),
@@ -302,14 +297,11 @@ impl Application for App {
                 output_device_list_options,
                 session_token,
                 userdata,
-                recording,
                 record_sender,
-                realtime_recording,
                 realtime_record_sender,
                 play_target_sender,
                 play_source_sender,
-                playing_source,
-                playing_target,
+                state,
                 record_vec,
                 cpu_mode,
                 offline_mode,
@@ -329,7 +321,7 @@ impl Application for App {
     }
 
     /// UI setup and state changes
-    fn view(&mut self) -> Element<Message> { view::view(&mut self.view_state, &self.input_device_list_options, &self.output_device_list_options, self.recording, self.realtime_recording, self.playing_source, self.playing_target) }
+    fn view(&mut self) -> Element<Message> { view::view(&mut self.view_state, &self.input_device_list_options, &self.output_device_list_options, self.state) }
 
     /// Respond to messages from the UI with appropriate actions
     fn update(&mut self, msg: Self::Message) -> Command<Self::Message> {
@@ -342,30 +334,37 @@ impl Application for App {
                 self.view_state.slider_1_value = new_value;
                 //FIXME unsafe and stupid
                 unsafe { INPUT_VOLUME = new_value };
-                if self.realtime_recording && self.realtime_record_sender.is_some() {
-                    self.realtime_record_sender.as_ref().unwrap().send((self.realtime_recording.clone(), self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone())).unwrap();
+                if self.state == AppState::Realtime && self.realtime_record_sender.is_some() {
+                    self.realtime_record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone())).unwrap();
                 }
-                if self.recording && self.record_sender.is_some() {
-                    self.record_sender.as_ref().unwrap().send((self.recording.clone(), self.view_state.slider_1_value.clone())).unwrap();
+                if self.state == AppState::Recording && self.record_sender.is_some() {
+                    self.record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone())).unwrap();
                 }
             }
             Message::Slider2Changed(new_value) => {
                 self.view_state.slider_2_value = new_value;
                 //FIXME unsafe and stupid
                 unsafe { OUTPUT_VOLUME  = new_value };
-                if self.realtime_recording && self.realtime_record_sender.is_some() {
-                    self.realtime_record_sender.as_ref().unwrap().send((self.realtime_recording.clone(), self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone())).unwrap();
+                if self.state == AppState::Realtime && self.realtime_record_sender.is_some() {
+                    self.realtime_record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone())).unwrap();
+                }
+                if self.state == AppState::PlayTarget && self.play_target_sender.is_some() {
+                    self.play_target_sender.as_ref().unwrap().send((true, self.view_state.slider_2_value.clone())).unwrap();
+                }
+                if self.state == AppState::PlaySource && self.play_source_sender.is_some() {
+                    self.play_source_sender.as_ref().unwrap().send((true, self.view_state.slider_2_value.clone())).unwrap();
                 }
             }
             // Realtime record button => record and playback at the same time
             Message::RealtimeRecordPressed => {
-                if self.realtime_recording {
+                if self.state == AppState::Realtime {
                     if self.realtime_record_sender.is_some()
                     {
                         let res = self.realtime_record_sender.as_ref().unwrap().send((false, self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone()));
                         if let Some(e) = res.err() {
                            error!("{}", e); 
                         }
+                        self.state = AppState::Idle;
                     }
                 } else {
                     self.view_state.show_spinner = true;
@@ -398,8 +397,9 @@ impl Application for App {
                     if let Some(e) = res.err() {
                         error!("{}", e);
                     }
+
+                    self.state = AppState::Realtime;
                 }
-                self.realtime_recording = !self.realtime_recording;
             }
             Message::FakeYouModelBrowsePressed => {
                 match self.handle_fakeyou_model_browse_pressed() {
@@ -546,15 +546,15 @@ impl Application for App {
             }
             Message::RecordPressed => { 
                 let input_device_name = self.view_state.input_device_list_selected.clone();
-                if self.recording && input_device_name != Some(t!("main_ui.list_item.from_file")) {
+                if self.state == AppState::Recording || self.state == AppState::ReadingFile {
                     if self.record_sender.is_some()
                     {
                         let res = self.record_sender.as_ref().unwrap().send((false, self.view_state.slider_1_value.clone()));
                         if let Some(e) = res.err() {
                             error!("{}", e);
                         }
-                        self.recording = !self.recording;
                     }
+                    self.state = AppState::Idle;
                 } else {
                     self.view_state.show_spinner = true;
                     let (record_sender, record_receiver) = std::sync::mpsc::channel();
@@ -568,24 +568,28 @@ impl Application for App {
                     };
 
                     command = Command::perform(start_recording(input_device, record_receiver), handle_recording); 
-                    if input_device_name != Some(t!("main_ui.list_item.from_file")) && self.record_sender.is_some() {
-                        let _ = self.record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone()));
-                        self.recording = !self.recording;
+                    if self.record_sender.is_some() {
+                        if input_device_name != Some(t!("main_ui.list_item.from_file")) {
+                            let _ = self.record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone()));
+                            self.state = AppState::Recording;
+                        } else {
+                            self.state = AppState::ReadingFile;
+                        }
                     }
                 }
 
 
             }
             Message::PlayTargetPressed => {
-                if self.playing_target {
+                if self.state == AppState::PlayTarget || self.state == AppState::WritingFile {
                     if self.play_target_sender.is_some()
                     {
                         let res = self.play_target_sender.as_ref().unwrap().send((false, self.view_state.slider_2_value.clone()));
                         if let Some(e) = res.err() {
                             error!("{}", e);
                         }
-                        self.playing_target = !self.playing_target;
                     }
+                    self.state = AppState::Idle;
                 } else {
                     let (play_target_sender, play_target_receiver) = std::sync::mpsc::channel();
                     self.play_target_sender = Some(play_target_sender);
@@ -606,22 +610,27 @@ impl Application for App {
                     };
                     command = Command::perform(play_target(self.record_vec.get_contents(), hubert, acoustic, hifigan, vad, output_device, play_target_receiver), handle_errors);
 
-                    if output_device_name != Some(t!("main_ui.list_item.to_file")) && self.play_target_sender.is_some() {
-                        self.play_target_sender.as_ref().unwrap().send((true, self.view_state.slider_2_value.clone())).unwrap();
-                        self.playing_target = !self.playing_target;
+                    if  self.play_target_sender.is_some() {
+                        if output_device_name != Some(t!("main_ui.list_item.to_file")) {
+                            self.play_target_sender.as_ref().unwrap().send((true, self.view_state.slider_2_value.clone())).unwrap();
+                            self.state = AppState::PlayTarget;
+                        }
+                        else {
+                            self.state = AppState::WritingFile;
+                        }
                     }
                 }
             }
             Message::PlaySourcePressed => { 
-                if self.playing_source {
+                if self.state == AppState::PlaySource {
                     if self.play_source_sender.is_some()
                     {
                         let res = self.play_source_sender.as_ref().unwrap().send((false, self.view_state.slider_2_value.clone()));
                         if let Some(e) = res.err() {
                             error!("{}", e);
                         }
-                        self.playing_source = !self.playing_source;
                     }
+                    self.state = AppState::Idle;
                 } else {
                     let (play_source_sender, play_source_receiver) = std::sync::mpsc::channel();
                     self.play_source_sender = Some(play_source_sender);
@@ -641,8 +650,8 @@ impl Application for App {
 
                     if self.play_source_sender.is_some() {
                         self.play_source_sender.as_ref().unwrap().send((true, self.view_state.slider_2_value.clone())).unwrap();
-                        self.playing_source = !self.playing_source;
                     }
+                    self.state = AppState::PlaySource;
                 }
             }
             Message::InputDeviceChanged(new_device) => {
@@ -703,15 +712,13 @@ impl Application for App {
             }
             Message::Done => {
                 // set the button text back to normal state
-                self.playing_source = false;
-                self.playing_target = false;
-                self.realtime_recording = false;
-                self.recording = false;
+                self.state = AppState::Idle;
 
                 // stop the spinner
                 self.view_state.show_spinner = false;
             }
         }
+        self.view_state.status_message = self.state.to_string();
         command
     }
 

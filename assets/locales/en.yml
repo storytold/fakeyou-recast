@@ -82,6 +82,15 @@ en:
       stopped_play_target: "Finished playing target audio"
       opening_model: "Opening model: %{file}"
     debug:
+  app_state:
+    recording: "Recording from input device"
+    play_source: "Playing source audio"
+    play_target: "Playing target audio"
+    reading_file: "Reading samples from input file"
+    writing_file: "Writing samples to output file"
+    realtime: "Running in realtime mode"
+    loading_model: "Loading the model"
+    model_warmup: "Preparing for use"
   misc:
     input: "input"
     output: "output"

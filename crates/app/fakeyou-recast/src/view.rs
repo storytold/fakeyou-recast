@@ -1,4 +1,4 @@
-use crate::Message;
+use crate::{Message, app_state::AppState};
 use std::path::PathBuf;
 use iced::{Length, Text, Row, Column,  Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}, Space, Color, Rectangle};
 use iced_aw::{modal::{self, Modal}, card::{self, Card}};
@@ -37,6 +37,7 @@ pub struct ViewState {
     pub spinner_frame: Vec<u8>,
     pub spinner_frame_index: u8,
     pub show_debug: bool,
+    pub status_message: String,
 }
 
 #[derive(Default)]
@@ -58,7 +59,7 @@ impl ViewState{
         view_state
     }
 }
-pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a Vec<String>, output_device_list_options: &'a Vec<String>, recording: bool, realtime_recording: bool, playing_source: bool, playing_target: bool) -> Element<'a, Message> {
+pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a Vec<String>, output_device_list_options: &'a Vec<String>, state: AppState) -> Element<'a, Message> {
     let empty_pathbuf = PathBuf::from("");
 
     // NB: New model selection
@@ -309,6 +310,12 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
             )
         )
         .push(Space::with_height(Length::Units(42)))
+        .push(Container::new(
+                Text::new(view_state.status_message.clone())
+                    .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
+                ).width(Length::Fill)
+            .center_x()
+        )
         .push(spinner)
     ).style(style::MainContainer).width(Length::Fill).height(Length::Fill).padding(28);
 
@@ -321,28 +328,28 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
             Row::new().spacing(10)
             .push(
                 Button::new(&mut view_state.record_state, 
-                    Text::new( if view_state.input_device_list_selected == Some(t!("main_ui.list_item.from_file")) { t!("main_ui.button.read_file") } else if recording { t!("main_ui.button.stop") } else { t!("main_ui.button.record")} ).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
+                    Text::new( if view_state.input_device_list_selected == Some(t!("main_ui.list_item.from_file")) { t!("main_ui.button.read_file") } else if state == AppState::Recording || state == AppState::ReadingFile { t!("main_ui.button.stop") } else { t!("main_ui.button.record")} ).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
                     .on_press(Message::RecordPressed)
                     .style(style::Button::Red)
                     .width(Length::Units(130))
                     .height(Length::Units(35))
             )
             .push(
-                Button::new(&mut view_state.play_source_state, Text::new(if playing_source { t!("main_ui.button.stop") } else { t!("main_ui.button.play_source")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::PlaySourcePressed)
+                Button::new(&mut view_state.play_source_state, Text::new(if state == AppState::PlaySource { t!("main_ui.button.stop") } else { t!("main_ui.button.play_source")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::PlaySourcePressed)
                 .style(style::Button::Red)
                 .width(Length::Units(130))
                 .height(Length::Units(35))
             )
             .push(
                 Button::new(&mut view_state.play_target_state, 
-                    Text::new(if view_state.output_device_list_selected == Some(t!("main_ui.list_item.to_file")) {t!("main_ui.button.write_file")} else if playing_target { t!("main_ui.button.stop") } else { t!("main_ui.button.play_target")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
+                    Text::new(if view_state.output_device_list_selected == Some(t!("main_ui.list_item.to_file")) {t!("main_ui.button.write_file")} else if state == AppState::PlayTarget || state == AppState::WritingFile { t!("main_ui.button.stop") } else { t!("main_ui.button.play_target")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
                     .on_press(Message::PlayTargetPressed)
                     .style(style::Button::Red)
                     .width(Length::Units(130))
                     .height(Length::Units(35))
             )
             .push(
-                Button::new(&mut view_state.realtime_record_state, Text::new(if realtime_recording { t!("main_ui.button.stop") } else { t!("main_ui.button.realtime")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::RealtimeRecordPressed)
+                Button::new(&mut view_state.realtime_record_state, Text::new(if state == AppState::Realtime { t!("main_ui.button.stop") } else { t!("main_ui.button.realtime")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::RealtimeRecordPressed)
                 .style(style::Button::Red)
                 .width(Length::Units(130))
                 .height(Length::Units(35))
