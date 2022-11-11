@@ -249,7 +249,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
 
     let spinner_image_handle = Handle::from_memory(view_state.spinner_frame.clone());
     let spinner = if view_state.show_spinner {
-        Container::new(Image::<Handle>::new(spinner_image_handle).height(Length::Units(50))).height(Length::Fill).align_y(Vertical::Bottom).width(Length::Fill).center_x()
+        Container::new(Image::<Handle>::new(spinner_image_handle).height(Length::Units(35))).height(Length::Fill).align_y(Vertical::Bottom).width(Length::Fill).center_x()
     } else {
         Container::new(Space::with_height(Length::Units(0))) // FIXME janky empty widget
     };
@@ -310,7 +310,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     )
             )
         )
-        .push(Space::with_height(Length::Units(42)))
+        .push(Space::with_height(Length::Units(22)))
         .push(Container::new(
                 Text::new(view_state.status_message.clone())
                     .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
