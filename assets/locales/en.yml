@@ -91,6 +91,10 @@ en:
     realtime: "Running in realtime mode"
     loading_model: "Loading the model"
     model_warmup: "Preparing for use"
+  tab:
+    voice: "Voice"
+    news: "News"
+    settings: "Settings"
   misc:
     input: "input"
     output: "output"

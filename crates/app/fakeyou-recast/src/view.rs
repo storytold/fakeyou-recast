@@ -1,7 +1,7 @@
 use crate::{Message, app_state::AppState};
 use std::path::PathBuf;
 use iced::{Length, Text, Row, Column,  Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}, Space, Color, Rectangle};
-use iced_aw::{modal::{self, Modal}, card::{self, Card}, tab_bar::{TabLabel, TabBar}};
+use iced_aw::{modal::{self, Modal}, card::{self, Card}, tab_bar::{self, TabLabel, TabBar}};
 use iced_native::alignment::{Horizontal, Vertical};
 use iced_native::{widget::image::Image, image::Handle};
 use rust_i18n::t;
@@ -371,14 +371,17 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
     let  main_ui = Column::new().push(
         TabBar::width_tab_labels(view_state.active_tab, 
             vec![
-                TabLabel::Text(String::from("Main")),
-                TabLabel::Text(String::from("News")),
-                TabLabel::Text(String::from("Settings"))
+                TabLabel::IconText('', t!("tab.voice")),
+                TabLabel::IconText('', t!("tab.news")),
+                TabLabel::IconText('', t!("tab.settings"))
             ], |active_tab|
             {
                 Message::TabChanged(active_tab)
             }
-        )
+        ).icon_font(iced::Font::External { name: "Font Awesome 6 Free Solid", bytes: &style::ICON_FONT })
+        .padding(10)
+        .icon_size(14)
+        .style_sheet(style::TabBar)
     ).push(
         match view_state.active_tab {
             0 => main_tab,
@@ -426,6 +429,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
 
 pub mod style {
     use iced::{Color, Background, widget::{container, button, pick_list, slider}};
+    use iced_aw::style::tab_bar;
     use iced_native::overlay::menu;
     
     pub struct MainContainer;
@@ -561,8 +565,37 @@ pub mod style {
         }
     }
 
+    pub struct TabBar;
+    impl TabBar {
+        fn style(&self, is_active: bool) -> tab_bar::Style {
+            tab_bar::Style {
+                background: Some(Background::Color(Color::from_rgb8(26, 26, 39))),
+                border_color: None,
+                border_width: 0.0,
+                tab_label_background: if is_active {
+                    Background::Color(Color::from_rgb8(79, 79, 105)) 
+                } else {
+                    Background::Color(Color::from_rgb8(57, 57, 76))
+                },
+                tab_label_border_color: Color::from_rgba8(178, 178, 178, 0.15),
+                tab_label_border_width: 1.0,
+                icon_color: Color::WHITE,
+                text_color: Color::WHITE,
+            }
+        }
+    }
+    impl tab_bar::StyleSheet for TabBar {
+        fn active(&self, is_active: bool) -> tab_bar::Style {
+            Self::style(&self, is_active)
+        }
+        fn hovered(&self, is_active: bool) -> tab_bar::Style {
+            Self::style(&self, is_active)
+        }
+    }
+
     pub const BOLD_FONT: [u8; 473160] = *include_bytes!("../../../../assets/FiraSans-SemiBold.ttf");
     pub const NONBOLD_FONT: [u8; 440984] = *include_bytes!("../../../../assets/FiraSans-Regular.ttf");
+    pub const ICON_FONT: [u8; 999396] = *include_bytes!("../../../../assets/Font Awesome 6 Free-Solid-900.otf");
 }
 
 fn username_text_handler(input: String) -> Message {
