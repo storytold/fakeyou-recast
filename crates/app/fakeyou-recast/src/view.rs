@@ -60,7 +60,7 @@ impl ViewState{
         view_state
     }
 }
-pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a Vec<String>, output_device_list_options: &'a Vec<String>, state: AppState) -> Element<'a, Message> {
+pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a Vec<String>, output_device_list_options: &'a Vec<String>, state: AppState, cpu_mode: bool) -> Element<'a, Message> {
     let empty_pathbuf = PathBuf::from("");
 
     // NB: New model selection
@@ -361,10 +361,19 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     .height(Length::Units(35))
             )
             .push(
-                Button::new(&mut view_state.realtime_record_state, Text::new(if state == AppState::Realtime { t!("main_ui.button.stop") } else { t!("main_ui.button.realtime")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::RealtimeRecordPressed)
-                .style(style::Button::Red)
-                .width(Length::Units(130))
-                .height(Length::Units(35))
+                if cpu_mode {
+                    // disable button by removing on_press
+                    Button::new(&mut view_state.realtime_record_state, Text::new(if state == AppState::Realtime { t!("main_ui.button.stop") } else { t!("main_ui.button.realtime")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center))
+                    .style(style::Button::Red)
+                    .width(Length::Units(130))
+                    .height(Length::Units(35))
+
+                } else { 
+                    Button::new(&mut view_state.realtime_record_state, Text::new(if state == AppState::Realtime { t!("main_ui.button.stop") } else { t!("main_ui.button.realtime")}).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::RealtimeRecordPressed)
+                    .style(style::Button::Red)
+                    .width(Length::Units(130))
+                    .height(Length::Units(35))
+                }
             )
         )
         .push(Space::with_height(Length::Units(20)))
