@@ -78,14 +78,14 @@ en:
       started_recording: "Recording started from %{dev}"
       stopped_recording: "Recording stopped"
       playing_source: "Playing source audio on %{dev}"
-      playing_target: "Running inference and playing target audio on %{dev}"
+      playing_target: "Processing and playing target audio on %{dev}"
       stopped_play_target: "Finished playing target audio"
       opening_model: "Opening model: %{file}"
     debug:
   app_state:
     recording: "Recording from input device"
     play_source: "Playing source audio"
-    play_target: "Playing target audio"
+    play_target: "Processing and playing target audio"
     reading_file: "Reading samples from input file"
     writing_file: "Writing samples to output file"
     realtime: "Running in realtime mode"

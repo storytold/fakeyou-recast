@@ -642,8 +642,6 @@ impl Application for App {
                     self.view_state.show_spinner = true;
                     let output_device_name = self.view_state.output_device_list_selected.clone();
 
-                    let output_device_name = self.view_state.output_device_list_selected.clone();
-
                     // pass None for file because playing source to file is pointless and confusing
                     let output_device_res = audio::get_output_device(output_device_name, None);
                     let mut output_device = audio::DeviceType::None;
@@ -669,6 +667,7 @@ impl Application for App {
             }
 
             Message::RecordingFinished(vec) => {
+                self.state = AppState::Idle;
                 self.view_state.show_spinner = false;
                 self.record_vec.set_contents(vec);
             }

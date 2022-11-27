@@ -263,7 +263,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     //.push(Column::with_children(left_model_selection_col_elems).spacing(7))
                     .push(Text::new(t!("main_ui.label.input_dev")))
                     .push(
-                        Row::new().spacing(5).push(Text::new("").font(iced::Font::External { name: "Font Awesome 6 Free Solid", bytes: &style::ICON_FONT }).size(20).height(Length::Units(32)).vertical_alignment(Vertical::Center))
+                        Row::new().spacing(5).push(Text::new("").font(iced::Font::External { name: "Font Awesome 6 Free Solid", bytes: &style::ICON_FONT }).size(14).height(Length::Units(32)).vertical_alignment(Vertical::Center))
                         .push(
                             PickList::new(
                             &mut view_state.input_device_list_state,
@@ -275,7 +275,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                         .style(style::PickList)
                         .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
                         .padding(8)
-                        .width(Length::Units(240))
+                        .width(Length::Units(245))
                     ))
                     .push(Space::with_height(Length::Units(17)))
                     .push(
@@ -293,7 +293,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                     //.push(Column::with_children(right_model_selection_col_elems).spacing(7))
                     .push(Text::new(t!("main_ui.label.output_dev")))
                     .push(
-                        Row::new().spacing(5).push(Text::new("").font(iced::Font::External { name: "Font Awesome 6 Free Solid", bytes: &style::ICON_FONT }).size(20).height(Length::Units(32)).vertical_alignment(Vertical::Center))
+                        Row::new().spacing(5).push(Text::new("").font(iced::Font::External { name: "Font Awesome 6 Free Solid", bytes: &style::ICON_FONT }).size(14).height(Length::Units(32)).vertical_alignment(Vertical::Center))
                         .push(
                             PickList::new(
                                 &mut view_state.output_device_list_state,
