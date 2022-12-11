@@ -9,6 +9,8 @@ use model_serde::serde::deserializer::ModelDeserializer;
 use native_dialog::{FileDialog, MessageDialog};
 use ringbuf::RingBuffer;
 use rubato::{FftFixedInOut, Resampler};
+use webrtc_vad::{SampleRate, Vad, VadMode};
+
 use std::{path::PathBuf, env, io::Write, sync::{atomic::{AtomicBool, Ordering},  mpsc::{self, TryRecvError}}};
 
 use rust_i18n::t;
@@ -21,7 +23,6 @@ mod audio;
 mod consts;
 mod discord;
 mod softvc;
-mod vad;
 mod view;
 mod spinner;
 mod error;
@@ -94,8 +95,6 @@ fn init_logging() -> Result<(), fern::InitError> {
 static mut INPUT_VOLUME: f32 = 80.0;
 static mut OUTPUT_VOLUME: f32 = 80.0;
 
-static mut VAD_CHUNK: [f32; VAD_SIZE] = [0.0f32; VAD_SIZE];
-
 struct App {
     /// Directory the application is launched from / running in.
     current_directory: PathBuf,
@@ -104,7 +103,6 @@ struct App {
     hubert: softvc::Hubert,
     acoustic: softvc::Acoustic,
     hifigan: softvc::Hifigan,
-    vad: vad::Vad,
     view_state: view::ViewState,
     input_device_list_options: Vec<String>,
     output_device_list_options: Vec<String>,
@@ -209,7 +207,6 @@ impl Application for App {
         let hubert = softvc::Hubert::new();
         let acoustic = softvc::Acoustic::new();
         let hifigan = softvc::Hifigan::new();
-        let vad = vad::Vad::new();
         let mut view_state = view::ViewState::new();
         let record_sender = None;
         let realtime_record_sender = None;
@@ -292,7 +289,6 @@ impl Application for App {
                 hubert,
                 acoustic,
                 hifigan,
-                vad,
                 view_state,
                 input_device_list_options,
                 output_device_list_options,
@@ -392,8 +388,7 @@ impl Application for App {
                     let hubert = self.hubert.clone();
                     let acoustic = self.acoustic.clone();
                     let hifigan = self.hifigan.clone();
-                    let vad = self.vad.clone();
-                    command = Command::perform(start_realtime(realtime_record_receiver, input_device, output_device, hubert, acoustic, hifigan, vad), handle_errors);
+                    command = Command::perform(start_realtime(realtime_record_receiver, input_device, output_device, hubert, acoustic, hifigan), handle_errors);
                     let res = self.realtime_record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone()));
                     if let Some(e) = res.err() {
                         error!("{}", e);
@@ -601,7 +596,6 @@ impl Application for App {
                     let hubert = self.hubert.clone();
                     let acoustic = self.acoustic.clone();
                     let hifigan = self.hifigan.clone();
-                    let vad = self.vad.clone();
 
                     let output_device_res = audio::get_output_device(output_device_name.clone(), output_file);
                     let mut output_device = audio::DeviceType::None;
@@ -610,9 +604,9 @@ impl Application for App {
                         Ok(out) => { output_device = out; }
                     };
                     if self.cpu_mode {
-                        command = Command::perform(play_target_cpu(self.record_vec.get_contents(), hubert, acoustic, hifigan, vad, output_device, play_target_receiver), handle_errors);
+                        command = Command::perform(play_target_cpu(self.record_vec.get_contents(), hubert, acoustic, hifigan, output_device, play_target_receiver), handle_errors);
                     } else {
-                        command = Command::perform(play_target(self.record_vec.get_contents(), hubert, acoustic, hifigan, vad, output_device, play_target_receiver), handle_errors);
+                        command = Command::perform(play_target(self.record_vec.get_contents(), hubert, acoustic, hifigan, output_device, play_target_receiver), handle_errors);
                     }
 
                     if  self.play_target_sender.is_some() {
@@ -785,11 +779,6 @@ impl App {
                 );
 
                 self.view_state.hubert_browse_selected = Some(PathBuf::from("./models/model2.recast_base"));
-
-                let vad = self.vad.clone();
-                std::thread::spawn(move || {
-                    vad.load(PathBuf::from("./models/silero_vad.jit"))
-                });
             },
             Ok(None) => {},
             Err(_e) => { handle_errors(Err(AppError::FileDialogError(model_directory))); }
@@ -801,7 +790,7 @@ impl App {
 
 //FIXME break this up and move parts of it into audio.rs
 /// Realtime record => record and playback at the same time
-async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32, f32)>, input_device: audio::DeviceType, output_device: audio::DeviceType, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, vad: vad::Vad) -> Result<(), AppError>
+async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32, f32)>, input_device: audio::DeviceType, output_device: audio::DeviceType, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan,) -> Result<(), AppError>
 {
     info!("{}", t!("log.info.start_realtime", in = input_device.to_string().as_str(), out = output_device.to_string().as_str()));
     let arc_cancel_token = std::sync::Arc::new(AtomicBool::new(false));
@@ -877,6 +866,7 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
     let ring2: RingBuffer<f32> = RingBuffer::new(out_chunk_size*2);
     let (mut producer2, mut consumer2) = ring2.split();
 
+
     let input_data_fn = move |data: &cpal::Data, _: &cpal::InputCallbackInfo| {
         match in_format {
             SampleFormat::F32 => {
@@ -915,6 +905,7 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
 
 
     std::thread::spawn(move || {
+        let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
         loop {
             if consumer1.len() >= resampler1_input_size {
                 let processing_start_time = std::time::Instant::now();
@@ -941,28 +932,11 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
                 }
                 //softvc_input.resize(TENSOR_SIZE, 0.0);
 
-                // Find active 50ms chunks with Silero VAD
-                let mut vad_confidence = vec![0.0; resampler1_output_size / VAD_SIZE+1];
-                let mut v = 0;
-                softvc_input[..resampler1_output_size].chunks(VAD_SIZE).for_each(|chunk| {
-                    unsafe { VAD_CHUNK.fill(0.0); }
-                    unsafe { VAD_CHUNK[..chunk.len()].copy_from_slice(chunk) };
-                    let vad_res = vad.forward(unsafe { &VAD_CHUNK});
-                    let mut vad_tensor = tch::Tensor::of_slice(&[0.0]);
-                    match vad_res {
-                        Err(e) => {
-                            // don't spam errors if there's already one known
-                            if !cancel_token1.load(Ordering::Relaxed) {
-                                handle_errors(Err(e));
-                            }
-                            cancel_token1.store(true, Ordering::Relaxed);
-                        },
-                        Ok(t) => {
-                            vad_tensor = t;
-                        }
-                    }
-                    vad_confidence[v] = vad_tensor.double_value(&[0]) as f32;
-                    v += 1;
+                // Find active 10ms chunks with WebRTC VAD
+                let mut vad_bools: Vec<bool> = Vec::new();
+                softvc_input[..resampler1_output_size].chunks(VAD_SIZE).for_each(|vad_chunk| {
+                    let vad_chunk_s16: Vec<i16> = vad_chunk.iter().map(|a: &f32| audio::float_to_pcm_s16(*a)).collect();
+                    vad_bools.push(vad.is_voice_segment(&vad_chunk_s16).unwrap_or(false));
                 });
                 
                 let res = softvc::inference(&softvc_input, hubert.clone(), acoustic.clone(), hifigan.clone());
@@ -981,8 +955,8 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
                             .map(|(e, sample)| {
                                 let mut sa = 0.0;
                                 for i in 0..(samples.len() / VAD_SIZE)  {
-                                    if i == vad_confidence.len() { break; }
-                                    if e < (i+1)*VAD_SIZE && e > i*VAD_SIZE &&  vad_confidence[i] > SPEAKER_THRESHOLD {
+                                    if i == vad_bools.len() { break; }
+                                    if e < (i+1)*VAD_SIZE && e > i*VAD_SIZE &&  vad_bools[i] {
                                         sa = *sample;
                                         break;
                                     }
@@ -1093,10 +1067,11 @@ async fn play_source(source: Vec<f32>, output_device: audio::DeviceType, play_so
 }
 
 /// Convert and play back the input buffer with the target voice
-async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, vad: vad::Vad, output_device: audio::DeviceType, play_target_receiver: mpsc::Receiver<(bool, f32)>) -> Result<(), AppError> {
+async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, output_device: audio::DeviceType, play_target_receiver: mpsc::Receiver<(bool, f32)>) -> Result<(), AppError> {
     info!("{}", t!("log.info.playing_target", dev = output_device.to_string().as_str()));
     debug!("first 20 recorded samples: {:?}", source[..20].to_vec());
 
+    let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
     match output_device {
         DeviceType::File((ref f, _)) => {
             let spec = hound::WavSpec {
@@ -1107,25 +1082,12 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
             };
             let mut writer = hound::WavWriter::new(f, spec).map_err(|e| AppError::HoundError(e))?;
             'outer: for chunk in source.chunks(OFFLINE_CHUNK_SIZE) {
-                // Find active 50ms chunks with Silero VAD
-                let mut vad_confidence: Vec<f32> = Vec::new();
+                // Find active 10ms chunks with WebRTC VAD
+                let mut vad_bools: Vec<bool> = Vec::new();
                 for vad_chunk in chunk.chunks(VAD_SIZE) {
-                    let mut vad_tensor = tch::Tensor::of_slice(&[0.0]);
-                    let mut vad_chunk = vad_chunk.to_vec();
-                    vad_chunk.resize(VAD_SIZE, 0.0);
-                    let vad_res = vad.forward(&vad_chunk);
-                    match vad_res {
-                        Err(e) => {
-                            handle_errors(Err(e));
-                            break 'outer;
-                        },
-                        Ok(t) => {
-                            vad_tensor = t;
-                        }
-                    }
-                    vad_confidence.push(vad_tensor.double_value(&[0]) as f32);
+                    let vad_chunk_s16: Vec<i16> = vad_chunk.iter().map(|a: &f32| audio::float_to_pcm_s16(*a)).collect();
+                    vad_bools.push(vad.is_voice_segment(&vad_chunk_s16).unwrap_or(false));
                 }
-                debug!("vad_confidence: {:?}", vad_confidence);
 
                 let mut softvc_input = Vec::new();
                 softvc_input.extend_from_slice(chunk);
@@ -1133,10 +1095,10 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
                 let mut out_samples = softvc::inference(&softvc_input, hubert.clone(), acoustic.clone(), hifigan.clone())?;
 
                 // nuke inactive chunks from the buffer
-                for v in 0..chunk.len()/VAD_SIZE {
-                    if v+1 >= vad_confidence.len() { break; }
+                for v in 0..chunk.len() / VAD_SIZE {
+                    if v+1 >= vad_bools.len() { break; }
                     if out_samples.len() < (v+1)*VAD_SIZE { break; }
-                    if vad_confidence[v] < SPEAKER_THRESHOLD {
+                    if vad_bools[v] == false {
                         out_samples[v*VAD_SIZE..(v+1)*VAD_SIZE].fill(0.0);
                     }
                 }
@@ -1176,32 +1138,16 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
             let cancel_token3 = arc_cancel_token.clone();
 
             std::thread::spawn(move || {
+                let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
                 for chunk in source.chunks(resampler_input_size)
                 {
                     let processing_start_time = std::time::Instant::now();
-                    // Find active 50ms chunks with Silero VAD
-                    let mut vad_confidence: Vec<f32> = Vec::new();
-                    chunk.chunks(VAD_SIZE).for_each(|vad_chunk| {
-                        let mut vad_tensor = tch::Tensor::of_slice(&[0.0]);
-                        let mut vad_chunk = vad_chunk.to_vec();
-                        vad_chunk.resize(VAD_SIZE, 0.0);
-                        let vad_res = vad.forward(&vad_chunk);
-                        match vad_res {
-                            Err(e) => {
-                                // don't spam errors if there's already one known
-                                if !cancel_token1.load(std::sync::atomic::Ordering::Relaxed) {
-                                    handle_errors(Err(e));
-                                }
-                                cancel_token1.store(true, std::sync::atomic::Ordering::Relaxed);
-                            },
-                            Ok(t) => {
-                                vad_tensor = t;
-                            }
-                        }
-                        vad_confidence.push(vad_tensor.double_value(&[0]) as f32)
-                    });
-
-                    debug!("vad_confidence: {:?}", vad_confidence);
+                    // Find active 10ms chunks with WebRTC VAD
+                    let mut vad_bools: Vec<bool> = Vec::new();
+                    for vad_chunk in chunk.chunks(VAD_SIZE) {
+                        let vad_chunk_s16: Vec<i16> = vad_chunk.iter().map(|a: &f32| audio::float_to_pcm_s16(*a)).collect();
+                        vad_bools.push(vad.is_voice_segment(&vad_chunk_s16).unwrap_or(false));
+                    }
 
                     let softvc_out = softvc::inference(&chunk, hubert.clone(), acoustic.clone(), hifigan.clone());
                     match softvc_out {
@@ -1224,8 +1170,8 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
                             .map(|(e, sample)| {
                                 let mut sa = 0.0;
                                 for i in 0..resampler_input_size/VAD_SIZE {
-                                    if i == vad_confidence.len() { break; }
-                                    if e < (i+1)*VAD_SIZE && e > i*VAD_SIZE && vad_confidence[i] > SPEAKER_THRESHOLD {
+                                    if i == vad_bools.len() { break; }
+                                    if e < (i+1)*VAD_SIZE && e > i*VAD_SIZE && vad_bools[i] {
                                         sa = *sample;
                                         break;
                                     }
@@ -1333,9 +1279,10 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
 
 /// For CPU inference, we process the entire buffer up front because we can't keep up with the
 /// speed necessary for realtime
-async fn play_target_cpu(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, vad: vad::Vad, output_device: audio::DeviceType, play_target_receiver: mpsc::Receiver<(bool, f32)>) -> Result<(), AppError> {
+async fn play_target_cpu(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, output_device: audio::DeviceType, play_target_receiver: mpsc::Receiver<(bool, f32)>) -> Result<(), AppError> {
     info!("{}", t!("log.info.playing_target", dev = output_device.to_string().as_str()));
     debug!("first 20 recorded samples: {:?}", source[..20].to_vec());
+    let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
 
     match output_device {
         DeviceType::File((ref f, _)) => {
@@ -1347,25 +1294,12 @@ async fn play_target_cpu(source: Vec<f32>, hubert: softvc::Hubert, acoustic: sof
             };
             let mut writer = hound::WavWriter::new(f, spec).map_err(|e| AppError::HoundError(e))?;
             'outer: for chunk in source.chunks(OFFLINE_CHUNK_SIZE) {
-                // Find active 50ms chunks with Silero VAD
-                let mut vad_confidence: Vec<f32> = Vec::new();
+                // Find active 10ms chunks with WebRTC VAD
+                let mut vad_bools: Vec<bool> = Vec::new();
                 for vad_chunk in chunk.chunks(VAD_SIZE) {
-                    let mut vad_tensor = tch::Tensor::of_slice(&[0.0]);
-                    let mut vad_chunk = vad_chunk.to_vec();
-                    vad_chunk.resize(VAD_SIZE, 0.0);
-                    let vad_res = vad.forward(&vad_chunk);
-                    match vad_res {
-                        Err(e) => {
-                            handle_errors(Err(e));
-                            break 'outer;
-                        },
-                        Ok(t) => {
-                            vad_tensor = t;
-                        }
-                    }
-                    vad_confidence.push(vad_tensor.double_value(&[0]) as f32);
+                    let vad_chunk_s16: Vec<i16> = vad_chunk.iter().map(|a: &f32| audio::float_to_pcm_s16(*a)).collect();
+                    vad_bools.push(vad.is_voice_segment(&vad_chunk_s16).unwrap_or(false));
                 }
-                debug!("vad_confidence: {:?}", vad_confidence);
 
                 let mut softvc_input = Vec::new();
                 softvc_input.extend_from_slice(chunk);
@@ -1373,9 +1307,10 @@ async fn play_target_cpu(source: Vec<f32>, hubert: softvc::Hubert, acoustic: sof
                 let mut out_samples = softvc::inference(&softvc_input, hubert.clone(), acoustic.clone(), hifigan.clone())?;
 
                 // nuke inactive chunks from the buffer
-                for v in 0..chunk.len()/VAD_SIZE {
-                    if v+1 == vad_confidence.len() { break; }
-                    if vad_confidence[v] < SPEAKER_THRESHOLD {
+                for v in 0..chunk.len() / VAD_SIZE {
+                    if v+1 >= vad_bools.len() { break; }
+                    if out_samples.len() < (v+1)*VAD_SIZE { break; }
+                    if vad_bools[v] == false {
                         out_samples[v*VAD_SIZE..(v+1)*VAD_SIZE].fill(0.0);
                     }
                 }
@@ -1415,29 +1350,12 @@ async fn play_target_cpu(source: Vec<f32>, hubert: softvc::Hubert, acoustic: sof
 
             for chunk in source.chunks(resampler_input_size)
             {
-                // Find active 50ms chunks with Silero VAD
-                let mut vad_confidence: Vec<f32> = Vec::new();
-                chunk.chunks(VAD_SIZE).for_each(|vad_chunk| {
-                    let mut vad_tensor = tch::Tensor::of_slice(&[0.0]);
-                    let mut vad_chunk = vad_chunk.to_vec();
-                    vad_chunk.resize(VAD_SIZE, 0.0);
-                    let vad_res = vad.forward(&vad_chunk);
-                    match vad_res {
-                        Err(e) => {
-                            // don't spam errors if there's already one known
-                            if !cancel_token1.load(std::sync::atomic::Ordering::Relaxed) {
-                                handle_errors(Err(e));
-                            }
-                            cancel_token1.store(true, std::sync::atomic::Ordering::Relaxed);
-                        },
-                        Ok(t) => {
-                            vad_tensor = t;
-                        }
-                    }
-                    vad_confidence.push(vad_tensor.double_value(&[0]) as f32)
-                });
-
-                debug!("vad_confidence: {:?}", vad_confidence);
+                // Find active 10ms chunks with WebRTC VAD
+                let mut vad_bools: Vec<bool> = Vec::new();
+                for vad_chunk in chunk.chunks(VAD_SIZE) {
+                    let vad_chunk_s16: Vec<i16> = vad_chunk.iter().map(|a: &f32| audio::float_to_pcm_s16(*a)).collect();
+                    vad_bools.push(vad.is_voice_segment(&vad_chunk_s16).unwrap_or(false));
+                }
 
                 let softvc_out = softvc::inference(&chunk, hubert.clone(), acoustic.clone(), hifigan.clone());
                 match softvc_out {
@@ -1460,8 +1378,8 @@ async fn play_target_cpu(source: Vec<f32>, hubert: softvc::Hubert, acoustic: sof
                         .map(|(e, sample)| {
                             let mut sa = 0.0;
                             for i in 0..resampler_input_size/VAD_SIZE {
-                                if i == vad_confidence.len() { break; }
-                                if e < (i+1)*VAD_SIZE && e > i*VAD_SIZE && vad_confidence[i] > SPEAKER_THRESHOLD {
+                                if i == vad_bools.len() { break; }
+                                if e < (i+1)*VAD_SIZE && e > i*VAD_SIZE && vad_bools[i] {
                                     sa = *sample;
                                     break;
                                 }
