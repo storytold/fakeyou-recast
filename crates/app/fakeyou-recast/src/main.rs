@@ -1071,7 +1071,7 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
     info!("{}", t!("log.info.playing_target", dev = output_device.to_string().as_str()));
     debug!("first 20 recorded samples: {:?}", source[..20].to_vec());
 
-    let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
+    let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::VeryAggressive);
     match output_device {
         DeviceType::File((ref f, _)) => {
             let spec = hound::WavSpec {
@@ -1138,7 +1138,7 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
             let cancel_token3 = arc_cancel_token.clone();
 
             std::thread::spawn(move || {
-                let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
+                let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::VeryAggressive);
                 for chunk in source.chunks(resampler_input_size)
                 {
                     let processing_start_time = std::time::Instant::now();
@@ -1282,7 +1282,7 @@ async fn play_target(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc:
 async fn play_target_cpu(source: Vec<f32>, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, output_device: audio::DeviceType, play_target_receiver: mpsc::Receiver<(bool, f32)>) -> Result<(), AppError> {
     info!("{}", t!("log.info.playing_target", dev = output_device.to_string().as_str()));
     debug!("first 20 recorded samples: {:?}", source[..20].to_vec());
-    let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
+    let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::VeryAggressive);
 
     match output_device {
         DeviceType::File((ref f, _)) => {
