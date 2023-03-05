@@ -326,6 +326,12 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                             Slider::new(&mut view_state.slider_2_state, 0.0..=100.0, view_state.slider_2_value, Message::Slider2Changed).style(style::Slider).height(44)
                         ).width(Length::Units(262))
                     )
+                    .push(Text::new("Chunk size (seconds)"))
+                    .push(
+                        Container::new(
+                            Slider::new(&mut view_state.chunk_size_slider_state, 0.0..=10.0, view_state.slider_2_value, Message::Slider2Changed).style(style::Slider).height(44)
+                        ).width(Length::Units(262))
+                    )
             )
         )
         .push(Space::with_height(Length::Units(22)))
