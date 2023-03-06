@@ -158,6 +158,8 @@ pub enum Message {
     ShowDebugPressed,
     Slider1Changed(f32),
     Slider2Changed(f32),
+    ChunkSizeSliderChanged(f32),
+    CheckboxToggled(bool),
     RecordPressed,
     PlayTargetPressed,
     PlaySourcePressed,
@@ -358,6 +360,12 @@ impl Application for App {
                     self.play_source_sender.as_ref().unwrap().send((true, self.view_state.slider_2_value.clone())).unwrap();
                 }
             }
+            Message::ChunkSizeSliderChanged(new_value) => {
+                self.view_state.chunk_size_slider_value = new_value;
+            }
+            Message::CheckboxToggled(new_value) => {
+                self.view_state.duplicate_5x = new_value;
+            }
             // Realtime record button => record and playback at the same time
             Message::RealtimeRecordPressed => {
                 if self.state == AppState::Realtime {
@@ -394,7 +402,7 @@ impl Application for App {
                     let hubert = self.hubert.clone();
                     let acoustic = self.acoustic.clone();
                     let hifigan = self.hifigan.clone();
-                    command = Command::perform(start_realtime(realtime_record_receiver, input_device, output_device, hubert, acoustic, hifigan), handle_errors);
+                    command = Command::perform(start_realtime(realtime_record_receiver, input_device, output_device, hubert, acoustic, hifigan, self.view_state.chunk_size_slider_value, self.view_state.duplicate_5x), handle_errors);
                     let res = self.realtime_record_sender.as_ref().unwrap().send((true, self.view_state.slider_1_value.clone(), self.view_state.slider_2_value.clone()));
                     if let Some(e) = res.err() {
                         error!("{}", e);
@@ -795,7 +803,7 @@ impl App {
 
 //FIXME break this up and move parts of it into audio.rs
 /// Realtime record => record and playback at the same time
-async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32, f32)>, input_device: audio::DeviceType, output_device: audio::DeviceType, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan,) -> Result<(), AppError>
+async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32, f32)>, input_device: audio::DeviceType, output_device: audio::DeviceType, hubert: softvc::Hubert, acoustic: softvc::Acoustic, hifigan: softvc::Hifigan, chunk_size_secs: f32, duplicate_5x: bool) -> Result<(), AppError>
 {
     info!("{}", t!("log.info.start_realtime", in = input_device.to_string().as_str(), out = output_device.to_string().as_str()));
     let arc_cancel_token = std::sync::Arc::new(AtomicBool::new(false));
@@ -842,8 +850,8 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
     let out_n_channels = output_config.channels() as usize;
     let out_format = output_config.sample_format();
 
-    let in_chunk_size = (0.4 * in_rate as f32 * in_n_channels as f32) as usize; // 400ms
-    let out_chunk_size = (0.4 * out_rate as f32 * out_n_channels as f32) as usize; // 400ms
+    let in_chunk_size = (chunk_size_secs * in_rate as f32 * in_n_channels as f32) as usize;
+    let out_chunk_size = (chunk_size_secs * out_rate as f32 * out_n_channels as f32) as usize;
                                                                                    
     info!("{}", t!("log.info.in_config", ch = in_n_channels.to_string().as_str(), freq = in_rate.to_string().as_str(), format = format!("{:?}", in_format).as_str()));
     info!("{}", t!("log.info.out_config", ch = out_n_channels.to_string().as_str(), freq = out_rate.to_string().as_str(), format = format!("{:?}", out_format).as_str()));
@@ -932,8 +940,13 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
 
 
                 let mut softvc_input = resampler1_output_buffer[0].clone();
-                while softvc_input.len() < TENSOR_SIZE {
-                    softvc_input.extend_from_within(0..softvc_input.len());
+
+                let original_len = softvc_input.len();
+
+                if duplicate_5x {
+                    while softvc_input.len() < original_len * 5 {
+                        softvc_input.extend_from_within(0..softvc_input.len());
+                    }
                 }
                 //softvc_input.resize(TENSOR_SIZE, 0.0);
 
@@ -975,7 +988,7 @@ async fn start_realtime(realtime_receiver: std::sync::mpsc::Receiver<(bool, f32,
                             Err(e) => { error!("{}", t!("log.error.out_resampler", error = e.to_string().as_str())) }
                         };
 
-                        resampler2_output_buffer[0].iter().for_each(|&sample| {
+                        resampler2_output_buffer[0]/*[..original_len]*/.iter().for_each(|&sample| {
                             // mono to stereo etc.
                             for _ in 0..out_n_channels {
                                 producer2.push(sample).unwrap_or(()); 

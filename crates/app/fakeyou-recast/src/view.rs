@@ -1,6 +1,6 @@
 use crate::{Message, app_state::AppState};
 use std::path::PathBuf;
-use iced::{Length, Text, Row, Column,  Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}, Space, Color, Rectangle};
+use iced::{Length, Text, Row, Column,  Container, Element, slider::{self, Slider}, pick_list::{self, PickList}, button::{self, Button}, text_input::{self, TextInput}, checkbox::{self, Checkbox}, Space, Color, Rectangle};
 use iced_aw::{modal::{self, Modal}, card::{self, Card}, tab_bar::{self, TabLabel, TabBar}};
 use iced_native::alignment::{Horizontal, Vertical};
 use iced_native::{widget::image::Image, image::Handle};
@@ -21,6 +21,7 @@ pub struct ViewState {
     pub output_browse_state: button::State,
     pub slider_1_state: slider::State,
     pub slider_2_state: slider::State,
+    pub chunk_size_slider_state: slider::State,
     pub input_device_list_state: pick_list::State<String>,
     pub output_device_list_state: pick_list::State<String>,
     pub fakeyou_model_browse_selected: Option<PathBuf>,
@@ -33,6 +34,8 @@ pub struct ViewState {
     pub output_browse_selected: Option<PathBuf>,
     pub slider_1_value: f32,
     pub slider_2_value: f32,
+    pub chunk_size_slider_value: f32,
+    pub duplicate_5x: bool,
     pub show_spinner: bool,
     pub spinner_frame: Vec<u8>,
     pub spinner_frame_index: u8,
@@ -57,6 +60,8 @@ impl ViewState{
         let mut view_state = Self::default();
         view_state.slider_1_value = 80.0;
         view_state.slider_2_value = 80.0;
+        view_state.chunk_size_slider_value = 0.4;
+        view_state.duplicate_5x = true;
         view_state
     }
 }
@@ -84,15 +89,43 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
             .into()
         );
 
-    let fakeyou_model_selection_row = Column::with_children(fakeyou_model_selection_col_elems).spacing(7);
+    // Debug menus
+    let mut debug_elems: Vec<Element<Message>> = vec![];
+    #[cfg(feature="devmode")]
+    {
+         debug_elems.push(
+             Text::new("Chunk size (seconds)").into()
+         );
+         debug_elems.push(
+            Slider::new(&mut view_state.chunk_size_slider_state, 0.0..=10.0, view_state.chunk_size_slider_value, Message::ChunkSizeSliderChanged)
+                .style(style::Slider)
+                .step(0.01)
+            .into()
+         );
+         debug_elems.push(
+             Text::new(format!("{:.3}", view_state.chunk_size_slider_value)).into()
+         );
+         debug_elems.push(
+            Checkbox::new(view_state.duplicate_5x, "Duplicate 5x", Message::CheckboxToggled).into()
+         );
+    }
+
+    let fakeyou_model_selection_row = Row::new().spacing(12)
+        .push(
+            Column::with_children(fakeyou_model_selection_col_elems).spacing(7)
+        )
+        .push(Space::with_width(Length::Units(12)))
+        .push(
+            Column::with_children(debug_elems).spacing(7)
+        );
 
     // NB: Old model selection
     
     let mut left_model_selection_col_elems: Vec<Element<Message>> = vec![];
     let mut right_model_selection_col_elems: Vec<Element<Message>> = vec![];
 
-    #[cfg(feature="devmode")]
-    {
+#[cfg(feature="devmode")]
+{
     let selected_model_str = if view_state.model_browse_selected.is_none() { t!("main_ui.label.no_file") } else {view_state.model_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default().to_string()};
     let selected_hifigan_str = if view_state.hifigan_browse_selected.is_none() { t!("main_ui.label.no_file") } else {view_state.hifigan_browse_selected.as_ref().unwrap_or(&empty_pathbuf).file_stem().unwrap_or_default().to_str().unwrap_or_default().to_string()};
     left_model_selection_col_elems
@@ -123,7 +156,7 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
     right_model_selection_col_elems.push(
         Button::new(&mut view_state.hifigan_browse_state, Text::new(t!("main_ui.button.browse")).horizontal_alignment(Horizontal::Center).vertical_alignment(Vertical::Center)).on_press(Message::HifiganBrowsePressed).style(style::Button::Grey).width(Length::Units(262)).height(Length::Units(35)).into()
     );
-    }
+}
 
 
     let mut left_file_selection_col_elems: Vec<Element<Message>> = vec![];
@@ -326,15 +359,9 @@ pub fn view<'a> (view_state: &'a mut ViewState, input_device_list_options: &'a V
                             Slider::new(&mut view_state.slider_2_state, 0.0..=100.0, view_state.slider_2_value, Message::Slider2Changed).style(style::Slider).height(44)
                         ).width(Length::Units(262))
                     )
-                    .push(Text::new("Chunk size (seconds)"))
-                    .push(
-                        Container::new(
-                            Slider::new(&mut view_state.chunk_size_slider_state, 0.0..=10.0, view_state.slider_2_value, Message::Slider2Changed).style(style::Slider).height(44)
-                        ).width(Length::Units(262))
-                    )
             )
         )
-        .push(Space::with_height(Length::Units(22)))
+        .push(Space::with_height(Length::Units(15)))
         .push(Container::new(
                 Text::new(view_state.status_message.clone())
                     .font(iced::Font::External { name: "Fira Sans Regular", bytes: &style::NONBOLD_FONT})
